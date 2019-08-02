@@ -1,6 +1,6 @@
 {
   "name": "proto-repl",
-  "main": "./lib/proto-repl",
+  "main": "./target/proto-repl",
   "version": "1.4.24",
   "description": "Provides a Clojure Development Environment with an interactive REPL. You can easily send code to the REPL, run tests in your project, view documentation, and much more.",
   "keywords": [
@@ -16,11 +16,12 @@
   },
   "dependencies": {
     "atom-space-pen-views": "2.1.1",
-    "underscore": "^1.8.3",
-    "underscore-plus": "^1.5.1",
-    "once": "^1.3.2",
     "jg-nrepl-client": "0.2.3",
-    "loophole": "1.1.0"
+    "lodash": "^4.17.15",
+    "loophole": "1.1.0",
+    "once": "^1.3.2",
+    "underscore": "^1.8.3",
+    "underscore-plus": "^1.5.1"
   },
   "package-dependencies": {
     "ink": "^0.3.2"
@@ -43,5 +44,9 @@
         "*": "consumeInk"
       }
     }
+  },
+  "devDependencies": {
+    "coffeescript": "^1.12.7",
+    "shadow-cljs": "^2.8.41"
   }
 }

@@ -1,0 +1,8 @@
+{:source-paths ["src/main"]
+ :dependencies [[org.clojure/core.async "0.4.500"]
+                [proto-repl "0.3.1"]]
+ :builds {:dev {:target :node-library
+                :output-to "target/proto-repl.js"
+                :exports-var proto-repl.core/exports
+                :main proto-repl.core/main
+                :devtools {:after-load server.main/reload!}}}}

@@ -189,15 +189,6 @@
              "proto-repl:remote-nrepl-focus-next" (state-get :remoteNreplFocusNext)}))))
 
 
-(comment
-  (.add js/atom.commands
-        "atom-workspace"
-        #js {"proto-repl:dev-command"
-             (partial (@commands "proto-repl:execute-top-block"
-                                 nil))})
-  (+ 1 1))
-
-
 (defn- deactivate []
   (.dispose (state-get :subscriptions))
   (.deactivate (state-get :saveRecallFeature))
@@ -214,8 +205,6 @@
   (state-merge! {:loading (ink.Loading.)}))
 
 
-
-
 (def exports
   (clj->js {:activate activate
             :config config
@@ -223,13 +212,3 @@
             :consumeInk consume-ink
             :deactivate deactivate
             :provide provide-autocomplete}))
-
-
-(comment
-  (do js/atom.commands.add)
-  (+ 1 1)
-  (.dispose (state-get :subscriptions))
-  (execute-code "::a")
-  (execute-code-in-ns "::a")
-  (state-get :executeCodeInNs)
-  js/process.pid)

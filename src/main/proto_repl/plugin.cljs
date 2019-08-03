@@ -22,16 +22,18 @@
 
 (defn execute-code-in-ns [code options]
   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
-    (let [ns- (.findNsDeclaration editor-utils editor)
-          options (clj->js (or options {}))
-          options (if ns- (lodash.set options "ns" ns-))]
-      (execute-code code options))))
+    (let [ns- (.findNsDeclaration editor-utils editor)]
+      (execute-code code (-> options
+                             (or {})
+                             (js->clj :keywordize-keys)
+                             (cond-> ns- (assoc :ns ns-)))))))
 
 
 (defn info [text] (some-> (state-get :repl) (.info text)))
 (defn stderr [text] (some-> (state-get :repl) (.stderr text)))
 (defn stdout [text] (some-> (state-get :repl) (.stdout text)))
 (defn doc [text] (some-> (state-get :repl) (.doc text)))
+
 
 (defn register-code-execution-extension
   "Registers a code execution extension with the given name and callback function.

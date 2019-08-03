@@ -1,4 +1,5 @@
-(ns proto-repl.editor-utils)
+(ns proto-repl.editor-utils
+  (:require [proto-repl.plugin :refer [stderr]]))
 
 (def ^:private js-editor-utils (js/require "../lib/editor-utils"))
 
@@ -6,26 +7,10 @@
 (defn get-active-text-editor [] (.getActiveTextEditor js/atom.workspace))
 
 
-(def get-cursor-in-block-range)
-
-(comment
-  (def editor (get-active-text-editor))
-  (-> editor
-      js/Object.getPrototypeOf
-      ; js/Object.getPrototypeOf
-      js/Object.getOwnPropertyNames
-      sort)
-
-  (-> js/atom.workspace
-      js/Object.getPrototypeOf
-      js/Object.getOwnPropertyNames
-      sort)
-
-  (def pane (.getActivePane js/atom.workspace))
-
-  (-> pane
-      js/Object.getPrototypeOf
-      js/Object.getOwnPropertyNames
-      sort)
-
-  (js/setTimeout #(.activate pane) 2000))
+(defn get-var-under-cursor [editor]
+  (let [word (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_]+"})]
+    (if (seq word)
+      word
+      (do
+        (stderr "This command requires you to position the cursor on a Clojure var.")
+        nil))))

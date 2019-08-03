@@ -25,11 +25,9 @@ module.exports =
 
 class SaveRecallFeature
 
-  # Instance of the repl
-  protoRepl: null
   subscriptions: null
 
-  constructor: (@protoRepl)->
+  constructor: ()->
     @subscriptions = new CompositeDisposable
     @subscriptions.add atom.commands.add 'atom-workspace',
       'proto-repl:insert-save-value-call': =>@insertSaveValueCall()
@@ -48,7 +46,7 @@ class SaveRecallFeature
 
   # Clears any displayed saved values and any values saved in the proto namespace.
   clearSavedValues: ->
-    @protoRepl.executeCode "(proto-repl.saved-values/clear-saved-values!)", displayInRepl: false
+    window.protoRepl.executeCode "(proto-repl.saved-values/clear-saved-values!)", displayInRepl: false
     if editor = atom.workspace.getActiveTextEditor()
       atom.commands.dispatch(atom.views.getView(editor), 'inline-results:clear-all')
 
@@ -56,23 +54,23 @@ class SaveRecallFeature
   # Fetches the latest saved values and displays them inline nest to the code.
   fetchAndDisplaySavedValues: ->
     # Fetch the latest saved values
-   @protoRepl.executeCode "(proto-repl.saved-values/saved-values)",
+   window.protoRepl.executeCode "(proto-repl.saved-values/saved-values)",
       displayInRepl: false
       resultHandler: (result, options)=>
         if result.error
-          @protoRepl.stderr("Error polling for saved values #{result.error}")
+          window.protoRepl.stderr("Error polling for saved values #{result.error}")
           return
 
         console.log result.value
         # Convert the saved values into a map of uniq forms to the display trees
-        uniqsToTrees = @protoRepl.ednSavedValuesToDisplayTrees(result.value)
+        uniqsToTrees = window.protoRepl.ednSavedValuesToDisplayTrees(result.value)
 
         for [uniq, tree] in uniqsToTrees
           # find the unique form in an editor
-          if foundRange = @protoRepl.EditorUtils.findEditorRangeContainingString(uniq)
+          if foundRange = window.protoRepl.EditorUtils.findEditorRangeContainingString(uniq)
             [editor, range] = foundRange
             # Display the saved values inline next to the call to save them.
-            @protoRepl.repl.displayInline(editor, range, tree)
+            window.protoRepl.repl.displayInline(editor, range, tree)
 
   # Polling is currently not used. There's an issue in that if you have a view
   # open it will overwrite the current inline display and collapse it. I need to

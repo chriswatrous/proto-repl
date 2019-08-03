@@ -1,9 +1,10 @@
 (ns proto-repl.commands
   (:require ["path" :refer [dirname]]
-            [proto-repl.editor-utils :refer [get-active-text-editor]]
-            [proto-repl.plugin :refer [state-merge! state-get execute-code-in-ns]]))
+            [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
+            [proto-repl.plugin :refer [execute-code-in-ns state-merge! state-get stderr]]))
 
 
+(def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 (def ^:private Repl (js/require "../lib/repl"))
 (def ^:private NReplConnectionView (js/require "../lib/views/nrepl-connection-view"))
@@ -24,6 +25,23 @@
                                    :inlineOptions {:editor editor
                                                    :range range})]
         (execute-code-in-ns text options)))))
+
+
+(defn execute-selected-text
+  "Executes the selected code."
+  ([] (execute-selected-text {}))
+  ([options]
+   (when-let [editor (get-active-text-editor)]
+     (let [text (.getSelectedText editor)
+           text (if (empty? text) (get-var-under-cursor editor) text)
+           range (.getSelectedBufferRange editor)]
+       (when (lodash.isEqual range.start range.end)
+         (set! range.end.column ##Inf))
+       (execute-code-in-ns text (merge options
+                                       {:inlineOptions {:editor editor
+                                                        :range range}
+                                        :displaycode text
+                                        :doBlock true}))))))
 
 
 (defn clear-repl []

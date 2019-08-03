@@ -1,14 +1,13 @@
 (ns proto-repl.core
   (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
             [proto-repl.commands :as c]
+            [proto-repl.editor-utils :as eu]
             [proto-repl.plugin :as p :refer [state-merge! state-get]]
-            [proto-repl.utils :refer [get-bind]]))
-
-(js/console.log "loading" (namespace ::x))
-
+            [proto-repl.utils :as u :refer [get-bind]]))
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private proto-repl (js/require "../lib/proto-repl"))
+(def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
 (def ^:private SaveRecallFeature (js/require "../lib/features/save-recall-feature"))
 (def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
@@ -161,7 +160,7 @@
             {"proto-repl:autoeval-file" (state-get :autoEvalCurrent)
              "proto-repl:clear-repl" #(c/clear-repl)
              "proto-repl:execute-block" #(c/execute-block {})
-             "proto-repl:execute-selected-text" (state-get :executeSelectedText)
+             "proto-repl:execute-selected-text" #(c/execute-selected-text)
              "proto-repl:execute-text-entered-in-repl" #(some-> (state-get :repl)
                                                                 .executeEnteredText)
              "proto-repl:execute-top-block" #(c/execute-block {:topLevel true})
@@ -224,7 +223,11 @@
                  :running #(.running (state-get :repl))
                  :getReplType #(.getType (state-get :repl))
                  :isSelfHosted #(.isSelfHosted (state-get :repl))
+                 :parseEdn (get-bind edn-reader :parse)
+                 :prettyEdn u/pretty-edn
+                 :ednToDisplayTree u/edn->display-tree
                  :registerCodeExecutionExtension p/register-code-execution-extension
+                 :getClojureVarUnderCursor eu/get-var-under-cursor
 
                  :executeCode p/execute-code
                  :executeCodeInNs p/execute-code-in-ns
@@ -234,3 +237,8 @@
                  :stderr p/stderr
                  :stdout p/stdout
                  :doc p/doc})))
+
+
+(let [notification (js/atom.notifications.addInfo "proto-repl loaded"
+                                                  #js {:dismissable true})]
+  (js/setTimeout #(.dismiss notification) 1000))

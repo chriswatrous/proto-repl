@@ -23,54 +23,6 @@ module.exports =
   saveRecallFeature: null
   extensionsFeature: null
 
-  # Executes the selected code.
-  # Valid options:
-  # * resultHandler - a callback function to invoke with the value that was read.
-  #   If this is passed in then the value will not be displayed in the REPL.
-  executeSelectedText: (options={})->
-    if editor = atom.workspace.getActiveTextEditor()
-      selectedText = editor.getSelectedText()
-      range = editor.getSelectedBufferRange()
-
-      if selectedText == ""
-        # Nothing selected. See if they're over a var.
-        if varName = @getClojureVarUnderCursor(editor)
-          selectedText = varName
-          range.end.column = Infinity
-
-      options.inlineOptions =
-        editor: editor
-        range: range
-      options.displayCode = selectedText
-      options.doBlock = true
-      @executeCodeInNs(selectedText, options)
-
-  # A helper function for parsing some EDN data into JavaScript objects.
-  parseEdn: (ednString)->
-    edn_reader.parse(ednString)
-
-  # Helper functions which takes an EDN string and pretty prints it. Returns the
-  # string formatted data.
-  prettyEdn: (ednString)->
-    try
-      edn_reader.pretty_print(ednString)
-    catch error
-      # Some responses from the REPL may be unparseable as in the case of var refs
-      # like #'user/reset. We'll just return the original string in that case.
-      return ednString
-
-  # Parses the edn string and returns a displayable tree.  A tree is an array
-  # whose first element is a string of the root of the tree. The rest of the
-  # elements are branches off the root. Each branch is another tree. A leaf is
-  # represented by a vector of one element.
-  ednToDisplayTree: (ednString)->
-    try
-      edn_reader.to_display_tree(ednString)
-    catch error
-      # Some responses from the REPL may be unparseable as in the case of var refs
-      # like #'user/reset. We'll just return the original string in that case.
-      return [ednString]
-
   ednSavedValuesToDisplayTrees: (ednString)->
     try
       edn_reader.saved_values_to_display_trees(ednString)
@@ -89,7 +41,7 @@ module.exports =
       code = editor.getTextInBufferRange(range)
 
       # Selected code is executed in a do block so only a single value is returned.
-      @executeCodeInNs code,
+      window.protoRepl.executeCodeInNs code,
         inlineOptions:
           editor: editor
           range: range
@@ -132,18 +84,10 @@ module.exports =
   #############################################################################
   # Code helpers
 
-  getClojureVarUnderCursor: (editor)->
-    word = EditorUtils.getClojureVarUnderCursor(editor)
-    if word == ""
-      window.protoRepl.stderr("This command requires you to position the cursor on a Clojure var.")
-      null
-    else
-      word
-
   prettyPrint: ->
     # Could make this work in self hosted repl by getting the last value and using
     # fipp to print it.
-    @executeCode("(do (require 'clojure.pprint) (clojure.pprint/pp))")
+    window.protoRepl.executeCode("(do (require 'clojure.pprint) (clojure.pprint/pp))")
 
   refreshNamespacesCommand:
     "(do
@@ -194,7 +138,7 @@ module.exports =
       window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
     else
       window.protoRepl.info("Refreshing code...\n")
-      @executeCode @refreshNamespacesCommand,
+      window.protoRepl.executeCode @refreshNamespacesCommand,
         displayInRepl: false,
         resultHandler: (result)=>
           @refreshResultHandler(callback, result)
@@ -208,7 +152,7 @@ module.exports =
       window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
     else
       window.protoRepl.info("Clearing all and then refreshing code...\n")
-      @executeCode "(do
+      window.protoRepl.executeCode "(do
                       (when (find-ns 'clojure.tools.namespace.repl)
                         (eval '(clojure.tools.namespace.repl/clear)))
                       #{@refreshNamespacesCommand})",
@@ -222,7 +166,7 @@ module.exports =
       else
         # Escape file name
         fileName = editor.getPath().replace(/\\/g,"\\\\")
-        @executeCode("(do (println \"Loading File #{fileName}\") (load-file \"#{fileName}\"))")
+        window.protoRepl.executeCode("(do (println \"Loading File #{fileName}\") (load-file \"#{fileName}\"))")
 
   runTestsInNamespace: ->
     if editor = atom.workspace.getActiveTextEditor()
@@ -232,22 +176,22 @@ module.exports =
         code = "(clojure.test/run-tests)"
         if atom.config.get("proto-repl.refreshBeforeRunningTestFile")
           @refreshNamespaces =>
-            @executeCodeInNs(code)
+            window.protoRepl.executeCodeInNs(code)
         else
-          @executeCodeInNs(code)
+          window.protoRepl.executeCodeInNs(code)
 
   runTestUnderCursor: ->
     if editor = atom.workspace.getActiveTextEditor()
       if window.protoRepl.isSelfHosted()
         window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
       else
-        if testName = @getClojureVarUnderCursor(editor)
+        if testName = window.protoRepl.getClojureVarUnderCursor(editor)
           code = "(do (clojure.test/test-vars [#'#{testName}]) (println \"tested #{testName}\"))"
           if atom.config.get("proto-repl.refreshBeforeRunningSingleTest")
             @refreshNamespaces =>
-              @executeCodeInNs(code)
+              window.protoRepl.executeCodeInNs(code)
           else
-            @executeCodeInNs(code)
+            window.protoRepl.executeCodeInNs(code)
 
   runAllTests: ->
     if window.protoRepl.isSelfHosted()
@@ -255,11 +199,11 @@ module.exports =
     else
       @refreshNamespaces =>
         # Tests are only run if the refresh is successful.
-        @executeCode("(def all-tests-future (future (time (clojure.test/run-all-tests))))")
+        window.protoRepl.executeCode("(def all-tests-future (future (time (clojure.test/run-all-tests))))")
 
   printVarDocumentation: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if varName = @getClojureVarUnderCursor(editor)
+      if varName = window.protoRepl.getClojureVarUnderCursor(editor)
         if window.protoRepl.isSelfHosted()
           code = "(with-out-str (doc #{varName}))"
           parser = (value)-> value.replace(/^-+\n/, '')
@@ -268,7 +212,7 @@ module.exports =
             "(do
                (require 'clojure.repl)
                (with-out-str (clojure.repl/doc #{varName})))"
-          parser = (value)=> @parseEdn(value).replace(/^-+\n/, '')
+          parser = (value)=> window.protoRepl.parseEdn(value).replace(/^-+\n/, '')
 
         if @ink && atom.config.get('proto-repl.showInlineResults')
           range = editor.getSelectedBufferRange()
@@ -278,7 +222,7 @@ module.exports =
 
         handled = false
 
-        @executeCodeInNs code, displayInRepl: false, resultHandler: (value)=>
+        window.protoRepl.executeCodeInNs code, displayInRepl: false, resultHandler: (value)=>
           # This seems to get called twice on error, not sure why.
           # To reproduce, try to run this command on java.lang.System.
           return if handled
@@ -301,18 +245,18 @@ module.exports =
 
   printVarCode: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if varName = @getClojureVarUnderCursor(editor)
+      if varName = window.protoRepl.getClojureVarUnderCursor(editor)
         if window.protoRepl.isSelfHosted()
           # code = "(source #{varName})"
           window.protoRepl.stderr("Showing source code is not yet supported in self hosted REPL.")
         else
           code = "(do (require 'clojure.repl) (clojure.repl/source #{varName}))"
-          @executeCodeInNs(code)
+          window.protoRepl.executeCodeInNs(code)
 
   # Lists all the vars in the selected namespace or namespace alias
   listNsVars: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if nsName = @getClojureVarUnderCursor(editor)
+      if nsName = window.protoRepl.getClojureVarUnderCursor(editor)
         if window.protoRepl.isSelfHosted()
           # code = "(dir #{nsName})"
           window.protoRepl.stderr("Listing namespace functions is not yet supported in self hosted REPL.")
@@ -326,12 +270,12 @@ module.exports =
                       (doseq [s (clojure.repl/dir-fn selected-ns)]
                         (println s))
                       (println \"------------------------------\")))"
-          @executeCodeInNs(code)
+          window.protoRepl.executeCodeInNs(code)
 
   # Lists all the vars with their documentation in the selected namespace or namespace alias
   listNsVarsWithDocs: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if nsName = @getClojureVarUnderCursor(editor)
+      if nsName = window.protoRepl.getClojureVarUnderCursor(editor)
         if window.protoRepl.isSelfHosted()
           # code = "(dir #{nsName})"
           window.protoRepl.stderr("Listing namespace functions is not yet supported in self hosted REPL.")
@@ -353,7 +297,7 @@ module.exports =
                         (println \" \" (:doc m)))
                       (println \"------------------------------\")))"
 
-          @executeCodeInNs(code)
+          window.protoRepl.executeCodeInNs(code)
 
   # Opens the file containing the currently selected var or namespace in the REPL. If the file is located
   # inside of a jar file it will decompress the jar file then open it. It will first check to see if a
@@ -364,7 +308,7 @@ module.exports =
       window.protoRepl.stderr("Opening files containing vars is not yet supported in self hosted REPL.")
     else
       if editor = atom.workspace.getActiveTextEditor()
-        if selected = @getClojureVarUnderCursor(editor)
+        if selected = window.protoRepl.getClojureVarUnderCursor(editor)
           text = "(do (require 'clojure.repl)
               (require 'clojure.java.shell)
               (require 'clojure.java.io)
@@ -420,12 +364,12 @@ module.exports =
                               (seq (.toArray (.stream jar-file))))))
                     [decompressed-file-path line])
                   [file-path line])))"
-          @executeCodeInNs text,
+          window.protoRepl.executeCodeInNs text,
             displayInRepl: false
             resultHandler: (result)=>
               if result.value
                 window.protoRepl.info("Opening #{result.value}")
-                [file, line] = @parseEdn(result.value)
+                [file, line] = window.protoRepl.parseEdn(result.value)
                 file = file.replace(/%20/g, " ")
                 atom.workspace.open(file, {initialLine: line-1, searchAllPanes: true})
               else

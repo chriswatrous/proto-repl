@@ -5,10 +5,7 @@ module.exports =
 
 # Allows extensions of Proto REPL to connect to code running in the REPL.
 class ExtensionsFeature
-
-  # Instance of the repl
-  protoRepl: null
-
+  
   running: false
 
   # A map of code execution extension names to callback functions.
@@ -20,7 +17,7 @@ class ExtensionsFeature
   # We bail out if there are too many.
   numErrors: 0
 
-  constructor: (@protoRepl)->
+  constructor: ()->
     null
 
   # TODO update the documentation of code execution extensions

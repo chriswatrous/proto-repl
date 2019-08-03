@@ -32,8 +32,7 @@ class Repl
   # A local or remote process
   process: null
 
-  # The text editor where results are displayed or commands can be enterered
-  replTextEditor: null
+  replView: null
 
   ink: null
 

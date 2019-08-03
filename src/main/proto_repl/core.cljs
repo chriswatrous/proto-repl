@@ -1,10 +1,13 @@
 (ns proto-repl.core
   (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
-            [proto-repl.utils :refer [get-bind]]
-            [proto-repl.exec :refer [execute-block]]
-            [proto-repl.plugin :refer [state-merge! state-get]]))
+            [proto-repl.commands :as c]
+            [proto-repl.plugin :as p :refer [state-merge! state-get]]
+            [proto-repl.utils :refer [get-bind]]))
+
+(js/console.log "loading" (namespace ::x))
 
 
+(def ^:private lodash (js/require "lodash"))
 (def ^:private proto-repl (js/require "../lib/proto-repl"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
 (def ^:private SaveRecallFeature (js/require "../lib/features/save-recall-feature"))
@@ -145,48 +148,44 @@
   (if (js/atom.config.get "proto-repl.enableCompletions") CompletionProvider []))
 
 
-
-
-
 (defn- activate []
-  (set! js/window.protoRepl proto-repl)
   (state-merge! {:subscriptions (CompositeDisposable.)
                  :emitter (Emitter.)
-                 :saveRecallFeature (SaveRecallFeature. proto-repl)
-                 :extensionsFeature (ExtensionsFeature. proto-repl)})
+                 :saveRecallFeature (SaveRecallFeature. js/window.proto-repl)
+                 :extensionsFeature (ExtensionsFeature. js/window.proto-repl)})
   (.add (state-get :subscriptions)
         (.add
           js/atom.commands
           "atom-workspace"
           (clj->js
-            {"proto-repl:toggle" (state-get :toggle)
-             "proto-repl:toggle-current-project-clj" (state-get :toggleCurrentEditorDir)
-             "proto-repl:remote-nrepl-connection" (state-get :remoteNReplConnection)
-             "proto-repl:start-self-hosted-repl" (state-get :selfHostedRepl)
-             "proto-repl:clear-repl" (state-get :clearRepl)
-             "proto-repl:toggle-auto-scroll" (state-get :toggleAutoScroll)
+            {"proto-repl:autoeval-file" (state-get :autoEvalCurrent)
+             "proto-repl:clear-repl" #(c/clear-repl)
+             "proto-repl:execute-block" #(c/execute-block {})
              "proto-repl:execute-selected-text" (state-get :executeSelectedText)
-             "proto-repl:execute-block" #(execute-block {})
-             "proto-repl:execute-top-block" #(execute-block {:topLevel true})
              "proto-repl:execute-text-entered-in-repl" #(some-> (state-get :repl)
                                                                 .executeEnteredText)
-             "proto-repl:load-current-file" (state-get :loadCurrentFile)
-             "proto-repl:refresh-namespaces" (state-get :refreshNamespaces)
-             "proto-repl:super-refresh-namespaces" (state-get :superRefreshNamespaces)
-             "proto-repl:exit-repl" (state-get :quitRepl)
-             "proto-repl:pretty-print" (state-get :prettyPrint)
-             "proto-repl:run-tests-in-namespace" (state-get :runTestsInNamespace)
-             "proto-repl:run-test-under-cursor" (state-get :runTestUnderCursor)
-             "proto-repl:run-all-tests" (state-get :runAllTests)
-             "proto-repl:print-var-documentation" (state-get :printVarDocumentation)
-             "proto-repl:print-var-code" (state-get :printVarCode)
-             "proto-repl:list-ns-vars" (state-get :listNsVars)
+             "proto-repl:execute-top-block" #(c/execute-block {:topLevel true})
+             "proto-repl:exit-repl" #(c/exit-repl)
+             "proto-repl:interrupt" #(c/interrupt)
              "proto-repl:list-ns-vars-with-docs" (state-get :listNsVarsWithDocs)
+             "proto-repl:list-ns-vars" (state-get :listNsVars)
+             "proto-repl:load-current-file" (state-get :loadCurrentFile)
              "proto-repl:open-file-containing-var" (state-get :openFileContainingVar)
-             "proto-repl:interrupt" (state-get :interrupt)
-             "proto-repl:autoeval-file" (state-get :autoEvalCurrent)
+             "proto-repl:pretty-print" (state-get :prettyPrint)
+             "proto-repl:print-var-code" (state-get :printVarCode)
+             "proto-repl:print-var-documentation" (state-get :printVarDocumentation)
+             "proto-repl:refresh-namespaces" (state-get :refreshNamespaces)
+             "proto-repl:remote-nrepl-connection" #(c/remote-nrepl-connection)
+             "proto-repl:remote-nrepl-focus-next" (state-get :remoteNreplFocusNext)
+             "proto-repl:run-all-tests" (state-get :runAllTests)
+             "proto-repl:run-test-under-cursor" (state-get :runTestUnderCursor)
+             "proto-repl:run-tests-in-namespace" (state-get :runTestsInNamespace)
+             "proto-repl:start-self-hosted-repl" #(c/start-self-hosted-repl)
              "proto-repl:stop-autoeval-file" (state-get :stopAutoEvalCurrent)
-             "proto-repl:remote-nrepl-focus-next" (state-get :remoteNreplFocusNext)}))))
+             "proto-repl:super-refresh-namespaces" (state-get :superRefreshNamespaces)
+             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
+             "proto-repl:toggle-current-project-clj" #(c/toggle-current-editor-dir)
+             "proto-repl:toggle" #(c/toggle)}))))
 
 
 (defn- deactivate []
@@ -212,3 +211,26 @@
             :consumeInk consume-ink
             :deactivate deactivate
             :provide provide-autocomplete}))
+
+
+(set! js/window.protoRepl
+      (-> proto-repl
+          lodash.clone
+          lodash.bindAll
+          (js/Object.assign
+            #js {:onDidConnect #(.on (state-get :emitter) "proto-repl:connected" %)
+                 :onDidClose #(.on (state-get :emitter) "proto-repl:closed" %)
+                 :onDidStop #(.on (state-get :emitter) "proto-repl:stopped" %)
+                 :running #(.running (state-get :repl))
+                 :getReplType #(.getType (state-get :repl))
+                 :isSelfHosted #(.isSelfHosted (state-get :repl))
+                 :registerCodeExecutionExtension p/register-code-execution-extension
+
+                 :executeCode p/execute-code
+                 :executeCodeInNs p/execute-code-in-ns
+
+                 ; Helpers for adding text to the REPL.)
+                 :info p/info
+                 :stderr p/stderr
+                 :stdout p/stdout
+                 :doc p/doc})))

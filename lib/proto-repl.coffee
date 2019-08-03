@@ -1,4 +1,4 @@
-# Load the ClojureScript code
+# Load t(proto-repl.saved-values/save 1)he ClojureScript code
 # Rebuild it with lein cljsbuild once.
 edn_reader = require './proto_repl/edn_reader.js'
 
@@ -23,130 +23,6 @@ module.exports =
   saveRecallFeature: null
   extensionsFeature: null
 
-  toggleAutoScroll: ->
-    cfg = atom.config
-    cfg.set('proto-repl.autoScroll', !(cfg.get('proto-repl.autoScroll')))
-
-  # Starts the REPL if it's not currently running.
-  toggle: (projectPath=null)->
-    if @repl == null
-      @repl = new Repl(@extensionsFeature)
-      @prepareRepl(@repl)
-      @repl.startProcessIfNotRunning(projectPath)
-    else
-      # REPL already running
-      @repl.startProcessIfNotRunning(projectPath)
-
-  prepareRepl: (repl)->
-    repl.consumeInk(@ink)
-    repl.onDidClose =>
-      @repl = null
-      @emitter.emit('proto-repl:closed')
-    repl.onDidStart =>
-      @emitter.emit('proto-repl:connected')
-      if atom.config.get("proto-repl.refreshOnReplStart")
-        @refreshNamespaces()
-    repl.onDidStop =>
-      @extensionsFeature.stopExtensionRequestProcessing()
-      @emitter.emit('proto-repl:stopped')
-
-  onDidConnect: (callback) ->
-    @emitter.on('proto-repl:connected', callback)
-
-  onDidClose: (callback) ->
-    @emitter.on('proto-repl:closed', callback)
-
-  onDidStop: (callback) ->
-    @emitter.on('proto-repl:stopped', callback)
-
-  # Starts the REPL in the directory of the file in the current editor.
-  toggleCurrentEditorDir: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if editorPath = editor.getPath()
-        @toggle(path.dirname(editorPath))
-
-  # Opens nRepl connection dialog
-  remoteNReplConnection: ->
-    confirmCallback = ({port, host})=>
-      unless @repl
-        @repl = new Repl(@extensionsFeature)
-        @prepareRepl(@repl)
-      @repl.startRemoteReplConnection({port, host})
-
-    @connectionView ?= new NReplConnectionView(confirmCallback)
-    @connectionView.show()
-
-  selfHostedRepl: ->
-    if @repl == null
-      @repl = new Repl(@extensionsFeature)
-      @prepareRepl(@repl)
-      @repl.startSelfHostedConnection()
-    else
-      @repl.startSelfHostedConnection()
-
-  # Returns true if the REPL is running
-  running: ->
-    @repl?.running()
-
-  # Returns the type of the REPL that's currently running.
-  # "SelfHosted", "Remote", Local"
-  getReplType: ->
-    @repl?.getType()
-
-  isSelfHosted: ->
-    @repl?.isSelfHosted()
-
-  clearRepl: ->
-    @repl?.clear()
-
-  # Helpers for adding text to the REPL.
-  info: (text)->
-    @repl?.info(text)
-
-  stderr: (text)->
-    @repl?.stderr(text)
-
-  stdout: (text)->
-    @repl?.stdout(text)
-
-  doc: (text)->
-    @repl?.doc(text)
-
-  # Interrupts the currently executing command.
-  interrupt: ()->
-    @repl?.interrupt()
-
-  quitRepl: ->
-    @repl?.exit()
-
-  ##############################################################################
-  ## Code Execution
-
-  # Registers a code execution extension with the given name and callback function.
-  #
-  # Code execution extensions allow other Atom packages to extend Proto REPL
-  # by taking output from the REPL and redirecting it for other uses like
-  # visualization.
-  # Code execution extensions are triggered when the result of code execution is
-  # a vector with the first element is :proto-repl-code-execution-extension. The
-  # second element in the vector should be the name of the extension to trigger.
-  # The name will be used to locate the callback function. The third element in
-  # the vector will be passed to the callback function.
-  registerCodeExecutionExtension: (name, callback)->
-    @extensionsFeature.registerCodeExecutionExtension(name, callback)
-
-  # Executes the given code string in the REPL. See Repl.executeCode for supported
-  # options.
-  # executeCode: (code, options={})->
-  #   @repl?.executeCode(code, options)
-
-  # executeCodeInNs: (code, options={})->
-  #   if editor = atom.workspace.getActiveTextEditor()
-  #     ns = EditorUtils.findNsDeclaration(editor)
-  #     if ns
-  #       options.ns = ns
-  #     @executeCode(code, options)
-
   # Executes the selected code.
   # Valid options:
   # * resultHandler - a callback function to invoke with the value that was read.
@@ -168,33 +44,6 @@ module.exports =
       options.displayCode = selectedText
       options.doBlock = true
       @executeCodeInNs(selectedText, options)
-
-  # Executes the block of code near the cursor.
-  # Valid options:
-  # * resultHandler - a callback function to invoke with the value that was read.
-  #   If this is passed in then the value will not be displayed in the REPL.
-  # * topLevel - Boolean to indicate if the top level block should be indicated.
-  #   If this is false the the closest block will be executed. Defaults to false.
-  # executeBlock: (options={})->
-  #   if editor = atom.workspace.getActiveTextEditor()
-  #     if range = EditorUtils.getCursorInBlockRange(editor, options)
-  #       text = editor.getTextInBufferRange(range).trim()
-  #       options.displayCode = text
-  #
-  #       # Highlight the area that's being executed temporarily
-  #       marker = editor.markBufferRange(range)
-  #       decoration = editor.decorateMarker(marker,
-  #           {type: 'highlight', class: "block-execution"})
-  #       # Remove the highlight after a short period of time
-  #       setTimeout(=>
-  #         marker.destroy()
-  #       , 350)
-  #
-  #       options.inlineOptions =
-  #         editor: editor
-  #         range: range
-  #
-  #       @executeCodeInNs(text, options)
 
   # A helper function for parsing some EDN data into JavaScript objects.
   parseEdn: (ednString)->
@@ -253,16 +102,16 @@ module.exports =
   # Turns on auto evaluation of the current file.
   autoEvalCurrent: ->
     if !atom.config.get('proto-repl.showInlineResults')
-      @stderr("Auto Evaling is not supported unless inline results is enabled")
+      window.protoRepl.stderr("Auto Evaling is not supported unless inline results is enabled")
       return null
 
     if !@ink
-      @stderr("Install Atom Ink package to use auto evaling.")
+      window.protoRepl.stderr("Install Atom Ink package to use auto evaling.")
       return null
 
     if editor = atom.workspace.getActiveTextEditor()
       if editor.protoReplAutoEvalDisposable
-        @stderr("Already auto evaling")
+        window.protoRepl.stderr("Already auto evaling")
       else
         # Add a handler for when the editor stops changing
         editor.protoReplAutoEvalDisposable = editor.onDidStopChanging =>
@@ -286,7 +135,7 @@ module.exports =
   getClojureVarUnderCursor: (editor)->
     word = EditorUtils.getClojureVarUnderCursor(editor)
     if word == ""
-      @stderr("This command requires you to position the cursor on a Clojure var.")
+      window.protoRepl.stderr("This command requires you to position the cursor on a Clojure var.")
       null
     else
       word
@@ -328,23 +177,23 @@ module.exports =
     # The callback will still be invoked in that case. That's important so that
     # run all tests will still work without it.
     if result.value
-      @info("Refresh complete")
+      window.protoRepl.info("Refresh complete")
       # Make sure the extension process is running after ever refresh.
       # If refreshing or laoding code had failed the extensions feature might not
       # have stopped itself.
       @extensionsFeature.startExtensionRequestProcessing()
       callback() if callback
     else if result.error
-      @stderr("Refresh Warning: " + result.error)
+      window.protoRepl.stderr("Refresh Warning: " + result.error)
 
   # Refreshes any changed code in the project since the last refresh. Presumes
   # clojure.tools.namespace is a dependency and setup with standard user/reset
   # function. Will invoke the optional callback if refresh is successful.
   refreshNamespaces: (callback=null)->
-    if @isSelfHosted()
-      @stderr("Refreshing not supported in self hosted REPL.")
+    if window.protoRepl.isSelfHosted()
+      window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
     else
-      @info("Refreshing code...\n")
+      window.protoRepl.info("Refreshing code...\n")
       @executeCode @refreshNamespacesCommand,
         displayInRepl: false,
         resultHandler: (result)=>
@@ -355,10 +204,10 @@ module.exports =
   # user/reset function. Will invoke the optional callback if refresh is
   # successful.
   superRefreshNamespaces: (callback=null)->
-    if @isSelfHosted()
-      @stderr("Refreshing not supported in self hosted REPL.")
+    if window.protoRepl.isSelfHosted()
+      window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
     else
-      @info("Clearing all and then refreshing code...\n")
+      window.protoRepl.info("Clearing all and then refreshing code...\n")
       @executeCode "(do
                       (when (find-ns 'clojure.tools.namespace.repl)
                         (eval '(clojure.tools.namespace.repl/clear)))
@@ -368,8 +217,8 @@ module.exports =
 
   loadCurrentFile: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if @isSelfHosted()
-        @stderr("Loading files is not supported yet in self hosted REPL.")
+      if window.protoRepl.isSelfHosted()
+        window.protoRepl.stderr("Loading files is not supported yet in self hosted REPL.")
       else
         # Escape file name
         fileName = editor.getPath().replace(/\\/g,"\\\\")
@@ -377,8 +226,8 @@ module.exports =
 
   runTestsInNamespace: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if @isSelfHosted()
-        @stderr("Running tests is not supported yet in self hosted REPL.")
+      if window.protoRepl.isSelfHosted()
+        window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
       else
         code = "(clojure.test/run-tests)"
         if atom.config.get("proto-repl.refreshBeforeRunningTestFile")
@@ -389,8 +238,8 @@ module.exports =
 
   runTestUnderCursor: ->
     if editor = atom.workspace.getActiveTextEditor()
-      if @isSelfHosted()
-        @stderr("Running tests is not supported yet in self hosted REPL.")
+      if window.protoRepl.isSelfHosted()
+        window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
       else
         if testName = @getClojureVarUnderCursor(editor)
           code = "(do (clojure.test/test-vars [#'#{testName}]) (println \"tested #{testName}\"))"
@@ -401,8 +250,8 @@ module.exports =
             @executeCodeInNs(code)
 
   runAllTests: ->
-    if @isSelfHosted()
-      @stderr("Running tests is not supported yet in self hosted REPL.")
+    if window.protoRepl.isSelfHosted()
+      window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
     else
       @refreshNamespaces =>
         # Tests are only run if the refresh is successful.
@@ -411,7 +260,7 @@ module.exports =
   printVarDocumentation: ->
     if editor = atom.workspace.getActiveTextEditor()
       if varName = @getClojureVarUnderCursor(editor)
-        if @isSelfHosted()
+        if window.protoRepl.isSelfHosted()
           code = "(with-out-str (doc #{varName}))"
           parser = (value)-> value.replace(/^-+\n/, '')
         else
@@ -440,11 +289,11 @@ module.exports =
           if value.value
             msg = parser(value.value).trim()
             if msg
-              @doc(msg)
+              window.protoRepl.doc(msg)
             else
-              @stderr("No doc found for #{varName}")
+              window.protoRepl.stderr("No doc found for #{varName}")
           else if value.error
-            @stderr(value.error)
+            window.protoRepl.stderr(value.error)
           else
             msg = 'Did not get value or error.'
             console.error(msg, value)
@@ -453,9 +302,9 @@ module.exports =
   printVarCode: ->
     if editor = atom.workspace.getActiveTextEditor()
       if varName = @getClojureVarUnderCursor(editor)
-        if @isSelfHosted()
+        if window.protoRepl.isSelfHosted()
           # code = "(source #{varName})"
-          @stderr("Showing source code is not yet supported in self hosted REPL.")
+          window.protoRepl.stderr("Showing source code is not yet supported in self hosted REPL.")
         else
           code = "(do (require 'clojure.repl) (clojure.repl/source #{varName}))"
           @executeCodeInNs(code)
@@ -464,9 +313,9 @@ module.exports =
   listNsVars: ->
     if editor = atom.workspace.getActiveTextEditor()
       if nsName = @getClojureVarUnderCursor(editor)
-        if @isSelfHosted()
+        if window.protoRepl.isSelfHosted()
           # code = "(dir #{nsName})"
-          @stderr("Listing namespace functions is not yet supported in self hosted REPL.")
+          window.protoRepl.stderr("Listing namespace functions is not yet supported in self hosted REPL.")
         else
           code = "(do
                     (require 'clojure.repl)
@@ -483,9 +332,9 @@ module.exports =
   listNsVarsWithDocs: ->
     if editor = atom.workspace.getActiveTextEditor()
       if nsName = @getClojureVarUnderCursor(editor)
-        if @isSelfHosted()
+        if window.protoRepl.isSelfHosted()
           # code = "(dir #{nsName})"
-          @stderr("Listing namespace functions is not yet supported in self hosted REPL.")
+          window.protoRepl.stderr("Listing namespace functions is not yet supported in self hosted REPL.")
         else
           code = "(do
                     (require 'clojure.repl)
@@ -511,8 +360,8 @@ module.exports =
   # jar file has already been decompressed once to avoid doing it multiple times for the same library.
   # Assumes that the Atom command line alias "atom" can be used to invoke Atom.
   openFileContainingVar: ->
-    if @isSelfHosted()
-      @stderr("Opening files containing vars is not yet supported in self hosted REPL.")
+    if window.protoRepl.isSelfHosted()
+      window.protoRepl.stderr("Opening files containing vars is not yet supported in self hosted REPL.")
     else
       if editor = atom.workspace.getActiveTextEditor()
         if selected = @getClojureVarUnderCursor(editor)
@@ -575,12 +424,12 @@ module.exports =
             displayInRepl: false
             resultHandler: (result)=>
               if result.value
-                @info("Opening #{result.value}")
+                window.protoRepl.info("Opening #{result.value}")
                 [file, line] = @parseEdn(result.value)
                 file = file.replace(/%20/g, " ")
                 atom.workspace.open(file, {initialLine: line-1, searchAllPanes: true})
               else
-                @stderr("Error trying to open: #{result.error}")
+                window.protoRepl.stderr("Error trying to open: #{result.error}")
 
   remoteNreplFocusNext: ->
     if @connectionView?

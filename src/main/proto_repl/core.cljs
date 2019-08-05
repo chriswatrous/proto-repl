@@ -5,6 +5,7 @@
             [proto-repl.plugin :as p :refer [state-merge! state-get]]
             [proto-repl.utils :as u :refer [get-bind]]))
 
+
 (def ^:private lodash (js/require "lodash"))
 (def ^:private proto-repl (js/require "../lib/proto-repl"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
@@ -157,12 +158,11 @@
           js/atom.commands
           "atom-workspace"
           (clj->js
-            {"proto-repl:autoeval-file" (state-get :autoEvalCurrent)
+            {"proto-repl:autoeval-file" #(c/autoeval-file)
              "proto-repl:clear-repl" #(c/clear-repl)
              "proto-repl:execute-block" #(c/execute-block {})
              "proto-repl:execute-selected-text" #(c/execute-selected-text)
-             "proto-repl:execute-text-entered-in-repl" #(some-> (state-get :repl)
-                                                                .executeEnteredText)
+             "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
              "proto-repl:execute-top-block" #(c/execute-block {:topLevel true})
              "proto-repl:exit-repl" #(c/exit-repl)
              "proto-repl:interrupt" #(c/interrupt)
@@ -170,17 +170,17 @@
              "proto-repl:list-ns-vars" (state-get :listNsVars)
              "proto-repl:load-current-file" (state-get :loadCurrentFile)
              "proto-repl:open-file-containing-var" (state-get :openFileContainingVar)
-             "proto-repl:pretty-print" (state-get :prettyPrint)
+             "proto-repl:pretty-print" #(c/pretty-print)
              "proto-repl:print-var-code" (state-get :printVarCode)
              "proto-repl:print-var-documentation" (state-get :printVarDocumentation)
-             "proto-repl:refresh-namespaces" (state-get :refreshNamespaces)
+             "proto-repl:refresh-namespaces" #(c/refresh-namespaces)
              "proto-repl:remote-nrepl-connection" #(c/remote-nrepl-connection)
              "proto-repl:remote-nrepl-focus-next" (state-get :remoteNreplFocusNext)
              "proto-repl:run-all-tests" (state-get :runAllTests)
              "proto-repl:run-test-under-cursor" (state-get :runTestUnderCursor)
              "proto-repl:run-tests-in-namespace" (state-get :runTestsInNamespace)
              "proto-repl:start-self-hosted-repl" #(c/start-self-hosted-repl)
-             "proto-repl:stop-autoeval-file" (state-get :stopAutoEvalCurrent)
+             "proto-repl:stop-autoeval-file" #(c/stop-autoeval-file)
              "proto-repl:super-refresh-namespaces" (state-get :superRefreshNamespaces)
              "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
              "proto-repl:toggle-current-project-clj" #(c/toggle-current-editor-dir)
@@ -222,15 +222,18 @@
                  :onDidStop #(.on (state-get :emitter) "proto-repl:stopped" %)
                  :running #(.running (state-get :repl))
                  :getReplType #(.getType (state-get :repl))
-                 :isSelfHosted #(.isSelfHosted (state-get :repl))
+                 :isSelfHosted p/self-hosted?
+                 :registerCodeExecutionExtension p/register-code-execution-extension
+                 :getClojureVarUnderCursor eu/get-var-under-cursor
+                 :executeCode p/execute-code
+                 :executeCodeInNs p/execute-code-in-ns
+
+                 ; Utility functions
                  :parseEdn (get-bind edn-reader :parse)
                  :prettyEdn u/pretty-edn
                  :ednToDisplayTree u/edn->display-tree
-                 :registerCodeExecutionExtension p/register-code-execution-extension
-                 :getClojureVarUnderCursor eu/get-var-under-cursor
-
-                 :executeCode p/execute-code
-                 :executeCodeInNs p/execute-code-in-ns
+                 :jsToEdn u/js->edn
+                 :ednSavedValuesToDisplayTrees u/edn-saved-values->display-trees
 
                  ; Helpers for adding text to the REPL.)
                  :info p/info
@@ -241,4 +244,9 @@
 
 (let [notification (js/atom.notifications.addInfo "proto-repl loaded"
                                                   #js {:dismissable true})]
+  (js/console.log "proto-repl loaded")
   (js/setTimeout #(.dismiss notification) 1000))
+
+(comment
+  js/process.pid
+  nil)

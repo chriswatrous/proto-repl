@@ -14,10 +14,12 @@
 (defn state-get [key] (get-bind proto-repl key))
 
 
-(defn execute-code [code options]
+(defn execute-code
   "Execute the given code string in the REPL. See Repl.executeCode for supported
   options."
-  (some-> (state-get :repl) (.executeCode code (clj->js (or options {})))))
+  ([code] (execute-code code {}))
+  ([code options]
+   (some-> (state-get :repl) (.executeCode (str code) (clj->js (or options {}))))))
 
 
 (defn execute-code-in-ns [code options]
@@ -48,6 +50,9 @@
   the vector will be passed to the callback function."
   [name callback]
   (.registerCodeExecutionExtension (state-get :extensionsFeature) name callback))
+
+
+(defn self-hosted? [] (.isSelfHosted (state-get :repl)))
 
 
 (comment

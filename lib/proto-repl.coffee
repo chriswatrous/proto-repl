@@ -23,112 +23,46 @@ module.exports =
   saveRecallFeature: null
   extensionsFeature: null
 
-  ednSavedValuesToDisplayTrees: (ednString)->
-    try
-      edn_reader.saved_values_to_display_trees(ednString)
-    catch error
-      console.log error
-      return []
+  # refreshNamespacesCommand:
+  #   "(do
+  #     (try
+  #       (require 'user)
+  #       (catch java.io.FileNotFoundException e
+  #         (println (str \"No user namespace defined. Defaulting to clojure.tools.namespace.repl/refresh.\\n\"))))
+  #     (try
+  #       (require 'clojure.tools.namespace.repl)
+  #       (catch java.io.FileNotFoundException e
+  #         (println \"clojure.tools.namespace.repl not available. Add proto-repl in your project.clj as a dependency to allow refresh. See https://clojars.org/proto-repl\")))
+  #     (let [user-reset 'user/reset
+  #           ctnr-refresh 'clojure.tools.namespace.repl/refresh
+  #           result (cond
+  #                    (find-var user-reset)
+  #                    ((resolve user-reset))
+  #
+  #                    (find-var ctnr-refresh)
+  #                    ((resolve ctnr-refresh))
+  #
+  #                    :else
+  #                     (println (str \"You can use your own refresh function, just define reset function in user namespace\\n\"
+  #                                   \"See this https://github.com/clojure/tools.namespace#reloading-code-motivation for why you should use it\")))]
+  #       (when (isa? (type result) Exception)
+  #         (println (.getMessage result)))
+  #       result))"
 
-  # Converts a Javascript object to EDN. This is useful when you need to take a
-  # JavaScript object and pass representation of it to Clojure running in the JVM.
-  jsToEdn: (jsData)->
-    edn_reader.js_to_edn(jsData)
-
-  # Helper function for autoevaling results.
-  executeRanges: (editor, ranges)->
-    if range = ranges.shift()
-      code = editor.getTextInBufferRange(range)
-
-      # Selected code is executed in a do block so only a single value is returned.
-      window.protoRepl.executeCodeInNs code,
-        inlineOptions:
-          editor: editor
-          range: range
-        displayInRepl: false # autoEval only displays inline
-        resultHandler: (result, options)=>
-          @repl.inlineResultHandler(result, options)
-          # Recurse back in again to execute the next range
-          @executeRanges(editor, ranges)
-
-  # Turns on auto evaluation of the current file.
-  autoEvalCurrent: ->
-    if !atom.config.get('proto-repl.showInlineResults')
-      window.protoRepl.stderr("Auto Evaling is not supported unless inline results is enabled")
-      return null
-
-    if !@ink
-      window.protoRepl.stderr("Install Atom Ink package to use auto evaling.")
-      return null
-
-    if editor = atom.workspace.getActiveTextEditor()
-      if editor.protoReplAutoEvalDisposable
-        window.protoRepl.stderr("Already auto evaling")
-      else
-        # Add a handler for when the editor stops changing
-        editor.protoReplAutoEvalDisposable = editor.onDidStopChanging =>
-          @ink?.Result.removeAll(editor)
-          @executeRanges(editor, EditorUtils.getTopLevelRanges(editor))
-        # Run it once the first time
-        @executeRanges(editor, EditorUtils.getTopLevelRanges(editor))
-
-  # Turns off autoevaling of the current file.
-  stopAutoEvalCurrent: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if editor.protoReplAutoEvalDisposable
-        editor.protoReplAutoEvalDisposable.dispose()
-        editor.protoReplAutoEvalDisposable = null
-
-
-
-  #############################################################################
-  # Code helpers
-
-  prettyPrint: ->
-    # Could make this work in self hosted repl by getting the last value and using
-    # fipp to print it.
-    window.protoRepl.executeCode("(do (require 'clojure.pprint) (clojure.pprint/pp))")
-
-  refreshNamespacesCommand:
-    "(do
-      (try
-        (require 'user)
-        (catch java.io.FileNotFoundException e
-          (println (str \"No user namespace defined. Defaulting to clojure.tools.namespace.repl/refresh.\\n\"))))
-      (try
-        (require 'clojure.tools.namespace.repl)
-        (catch java.io.FileNotFoundException e
-          (println \"clojure.tools.namespace.repl not available. Add proto-repl in your project.clj as a dependency to allow refresh. See https://clojars.org/proto-repl\")))
-      (let [user-reset 'user/reset
-            ctnr-refresh 'clojure.tools.namespace.repl/refresh
-            result (cond
-                     (find-var user-reset)
-                     ((resolve user-reset))
-
-                     (find-var ctnr-refresh)
-                     ((resolve ctnr-refresh))
-
-                     :else
-                      (println (str \"You can use your own refresh function, just define reset function in user namespace\\n\"
-                                    \"See this https://github.com/clojure/tools.namespace#reloading-code-motivation for why you should use it\")))]
-        (when (isa? (type result) Exception)
-          (println (.getMessage result)))
-        result))"
-
-  refreshResultHandler: (callback, result)->
-    # Value will contain an exception if it's not valid otherwise it will be nil
-    # nil will also be returned if there is no clojure.tools.namespace available.
-    # The callback will still be invoked in that case. That's important so that
-    # run all tests will still work without it.
-    if result.value
-      window.protoRepl.info("Refresh complete")
-      # Make sure the extension process is running after ever refresh.
-      # If refreshing or laoding code had failed the extensions feature might not
-      # have stopped itself.
-      @extensionsFeature.startExtensionRequestProcessing()
-      callback() if callback
-    else if result.error
-      window.protoRepl.stderr("Refresh Warning: " + result.error)
+  # refreshResultHandler: (callback, result)->
+  #   # Value will contain an exception if it's not valid otherwise it will be nil
+  #   # nil will also be returned if there is no clojure.tools.namespace available.
+  #   # The callback will still be invoked in that case. That's important so that
+  #   # run all tests will still work without it.
+  #   if result.value
+  #     window.protoRepl.info("Refresh complete")
+  #     # Make sure the extension process is running after ever refresh.
+  #     # If refreshing or laoding code had failed the extensions feature might not
+  #     # have stopped itself.
+  #     @extensionsFeature.startExtensionRequestProcessing()
+  #     callback() if callback
+  #   else if result.error
+  #     window.protoRepl.stderr("Refresh Warning: " + result.error)
 
   # Refreshes any changed code in the project since the last refresh. Presumes
   # clojure.tools.namespace is a dependency and setup with standard user/reset

@@ -1,7 +1,14 @@
 (ns proto-repl.commands
-  (:require ["path" :refer [dirname]]
+  (:require [clojure.pprint :as pp]
+            ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
-            [proto-repl.plugin :refer [execute-code-in-ns state-merge! state-get stderr]]))
+            [proto-repl.plugin :refer [execute-code
+                                       execute-code-in-ns
+                                       info
+                                       self-hosted?
+                                       state-get
+                                       state-merge!
+                                       stderr]]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -44,6 +51,52 @@
                                         :doBlock true}))))))
 
 
+(defn- execute-ranges [editor ranges]
+  (when-let [range (first ranges)]
+    (execute-code-in-ns
+      (.getTextInBufferRange editor)
+      {:inlineOptions {:editor editor
+                       :range range}
+       :displayInRepl false
+       :resultHandler (fn [result options]
+                        (.inlineResultHandler (state-get :repl))
+                        (execute-ranges editor (rest ranges)))})))
+
+
+(defn- get-top-level-ranges [editor]
+  (into [] (.getTopLevelRanges editor-utils editor)))
+
+
+(defn autoeval-file
+  "Turn on auto evaluation of the current file."
+  []
+  (let [ink (state-get :ink)
+        editor (get-active-text-editor)]
+    (cond (not (js/atom.config.get "proto-repl.showInlineResults"))
+          (stderr "Auto Evaling is not supported unless inline results is enabled")
+          (not ink)
+          (stderr "Install Atom Ink package to use auto evaling.")
+          editor
+          (if editor.protoReplAutoEvalDisposable
+            (stderr "Already auto evaling")
+            (do
+              (set! editor.protoReplAutoEvalDisposable
+                    (.onDidStopChanging
+                      editor
+                      (fn [] (.removeAll ink.Result editor)
+                             (execute-ranges editor (get-top-level-ranges editor)))))
+              (execute-ranges editor (get-top-level-ranges editor)))))))
+
+
+(defn stop-autoeval-file
+  "Turns off autoevaling of the current file."
+  []
+  (when-let [editor (get-active-text-editor)]
+    (when editor.protoReplAutoEvalDisposable
+      (.dispose editor.protoReplAutoEvalDisposable)
+      (set! editor.protoReplAutoEvalDisposable nil))))
+
+
 (defn clear-repl []
   (some-> (state-get :repl) .clear))
 
@@ -57,7 +110,73 @@
   (.exit (state-get :repl)))
 
 
-;;;; Repl starting commands ;;;;
+(defn pretty-print
+  "Pretty print the last value"
+  []
+  (execute-code (str '(do (require 'clojure.pprint) (clojure.pprint/pp)))))
+
+
+(defn execute-text-entered-in-repl []
+  (some-> (state-get :repl) .executeEnteredText))
+
+
+(def ^:private refresh-namespaces-code
+  '(do
+    (try
+      (require 'user)
+      (catch java.io.FileNotFoundException e
+        (println (str "No user namespace defined. Defaulting to "
+                      "clojure.tools.namespace.repl/refresh."))))
+    (try
+      (require 'clojure.tools.namespace.repl)
+      (catch java.io.FileNotFoundException e
+        (println (str "clojure.tools.namespace.repl not available. Add proto-repl in your "
+                      "project.clj as a dependency to allow refresh. See "
+                      "https://clojars.org/proto-repl"))))
+    (let [refresh (or (find-var 'user/reset) (find-var 'clojure.tools.namespace.repl/refresh))
+          result
+          (if refresh
+            (refresh)
+            (println (str "You can use your own refresh function, just define reset function in "
+                          "user namespace\n"
+                          "See this https://github.com/clojure/tools.namespace#"
+                          "reloading-code-motivation for why you should use it.")))]
+      (when (isa? (type result) Exception)
+        (println (.getMessage result)))
+      result)))
+
+
+(defn- refresh-result-handler [result callback]
+  ; Value will contain an exception if it's not valid otherwise it will be nil
+  ; nil will also be returned if there is no clojure.tools.namespace available.
+  ; The callback will still be invoked in that case. That's important so that
+  ; run all tests will still work without it.
+  (cond result.value
+        (do (info "Refresh complete")
+            ; Make sure the extension process is running after ever refresh.
+            ; If refreshing or loading code had failed the extensions feature might not
+            ; have stopped itself.
+            (.startExtensionRequestProcessing (state-get :extensionsFeature))
+            (when callback (callback)))
+        result.error
+        (stderr (str "Refresh Warning: " result.error))))
+
+
+(defn refresh-namespaces
+  "Refreshes any changed code in the project since the last refresh. Presumes
+  clojure.tools.namespace is a dependency and setup with standard user/reset
+  function. Will invoke the optional callback if refresh is successful."
+  ([] (refresh-namespaces nil))
+  ([callback]
+   (if (self-hosted?)
+     (stderr "Refreshing not supported in self hosted REPL.")
+     (do (info "Refreshing code...")
+         (execute-code refresh-namespaces-code
+                       {:displayInRepl false
+                        :resultHandler #(refresh-result-handler % callback)})))))
+
+
+;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- prepare-repl [repl]
   (let [pane (.getActivePane js/atom.workspace)]
@@ -117,7 +236,7 @@
   (.startSelfHostedConnection (state-get :repl)))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (defn toggle-auto-scroll []

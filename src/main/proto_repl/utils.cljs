@@ -22,3 +22,17 @@
   [edn-string]
   (try (.to_display_tree edn-reader edn-string)
        (catch :default err #js [edn-string])))
+
+
+(defn js->edn
+  "Converts a Javascript object to EDN. This is useful when you need to take a
+  JavaScript object and pass representation of it to Clojure running in the JVM."
+  [js-data]
+  (.js_to_edn edn-reader js-data))
+
+
+(defn edn-saved-values->display-trees [edn-string]
+  (try (.saved_values_to_display_tree edn-reader edn-string)
+       (catch :default err
+         (js/console.log err)
+         #js [])))

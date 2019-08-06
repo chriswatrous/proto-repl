@@ -20,23 +20,28 @@
                       "running a single selected test.")
     :default true
     :type "boolean"}
+
    :bootArgs
    {:description "The arguments to be passed to boot. For advanced users only."
     :default "--no-colors dev repl --server wait"
     :type "string"}
+
    :autoScroll
    {:description "Sets whether or not the REPL scrolls when new content is written."
     :default true
     :type "boolean"}
+
    :clojurePath
    {:description "The path to the clojure executable."
     :default "clj"
     :type "string"}
+
    :enableCompletions
    {:description (str "Configures whether autocompletion of Clojure forms should be supported. "
                       "Changing this requires a restart of Atom.")
     :default true
     :type "boolean"}
+
    :preferredRepl
    {:description (str "Sets the order of preference for REPLs if your project has multiple build "
                       "files.")
@@ -44,62 +49,76 @@
     :type "array"
     :items {:enum ["lein" "boot" "gradle" "clojure"]
             :type "string"}}
+
    :leinArgs
    {:description "The arguments to be passed to leiningen. For advanced users only."
     :default "repl :headless"
     :type "string"}
+
    :openReplInRightPane
    {:description (str "Configure whether the REPL should open in a pane to the right or the "
                       "current pane.")
     :default true
     :type "boolean"}
+
    :refreshBeforeRunningTestFile
    {:description (str "Configures whether the REPL should automatically refresh code before "
                       "running all the tests in a file.")
     :default true
     :type "boolean"}
+
    :autoPrettyPrint
    {:description "Configures whether the REPL automatically pretty prints values."
     :default false
     :type "boolean"}
+
    :historySize
    {:description "The number of elements to keep in the history"
     :default 50
     :type "number"}
+
    :bootPath
    {:description "The path to the boot executable."
     :default "boot"
     :type "string"}
+
    :showInlineResults
    {:description "Shows inline results of code execution. Install Atom Ink package to use this."
     :default true
     :type "boolean"}
+
    :refreshOnReplStart
    {:description "Configures whether the REPL should automatically refresh code when it starts."
     :default true
     :type "boolean"}
+
    :gradleArgs
    {:description "The arguments to be passed to gradle. For advanced users only."
     :default ":clojureRepl --console=plain --quiet"
     :type "string"}
+
    :displayHelpText
    {:description "Enables the display of help text when the REPL starts."
     :default true
     :type "boolean"}
+
    :inkConsole
    {:description (str "Configure whether to use the Atom Ink console for the REPL output. If set "
                       "to false a regular text editor is used for output.")
     :default true
     :type "boolean"}
+
    :leinPath
    {:description "The path to the lein executable."
     :default "lein"
     :type "string"}
+
    :useClojureSyntax
    {:description (str "Sets whether or not the REPL should use Clojure syntax for highlighting. "
                       "Disable this if having performance issues with REPL display.")
     :default true
     :type "boolean"}
+
    :displayExecutedCodeInRepl
    {:description "Sets whether code sent to the REPL is displayed."
     :default true
@@ -160,28 +179,28 @@
           (clj->js
             {"proto-repl:autoeval-file" #(c/autoeval-file)
              "proto-repl:clear-repl" #(c/clear-repl)
-             "proto-repl:execute-block" #(c/execute-block {})
+             "proto-repl:execute-block" #(c/execute-block)
              "proto-repl:execute-selected-text" #(c/execute-selected-text)
              "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
              "proto-repl:execute-top-block" #(c/execute-block {:topLevel true})
              "proto-repl:exit-repl" #(c/exit-repl)
              "proto-repl:interrupt" #(c/interrupt)
-             "proto-repl:list-ns-vars-with-docs" (state-get :listNsVarsWithDocs)
-             "proto-repl:list-ns-vars" (state-get :listNsVars)
-             "proto-repl:load-current-file" (state-get :loadCurrentFile)
-             "proto-repl:open-file-containing-var" (state-get :openFileContainingVar)
+             "proto-repl:list-ns-vars-with-docs" #(c/list-ns-vars-with-docs)
+             "proto-repl:list-ns-vars" #(c/list-ns-vars)
+             "proto-repl:load-current-file" #(c/load-current-file)
+             "proto-repl:open-file-containing-var" #(c/open-file-containing-var)
              "proto-repl:pretty-print" #(c/pretty-print)
-             "proto-repl:print-var-code" (state-get :printVarCode)
-             "proto-repl:print-var-documentation" (state-get :printVarDocumentation)
+             "proto-repl:print-var-code" #(c/print-var-code)
+             "proto-repl:print-var-documentation" #(c/print-var-documentation)
              "proto-repl:refresh-namespaces" #(c/refresh-namespaces)
              "proto-repl:remote-nrepl-connection" #(c/remote-nrepl-connection)
-             "proto-repl:remote-nrepl-focus-next" (state-get :remoteNreplFocusNext)
-             "proto-repl:run-all-tests" (state-get :runAllTests)
-             "proto-repl:run-test-under-cursor" (state-get :runTestUnderCursor)
-             "proto-repl:run-tests-in-namespace" (state-get :runTestsInNamespace)
+             "proto-repl:remote-nrepl-focus-next" #(c/remote-nrepl-focus-next)
+             "proto-repl:run-all-tests" #(c/run-all-tests)
+             "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
+             "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
              "proto-repl:start-self-hosted-repl" #(c/start-self-hosted-repl)
              "proto-repl:stop-autoeval-file" #(c/stop-autoeval-file)
-             "proto-repl:super-refresh-namespaces" (state-get :superRefreshNamespaces)
+             "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
              "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
              "proto-repl:toggle-current-project-clj" #(c/toggle-current-editor-dir)
              "proto-repl:toggle" #(c/toggle)}))))
@@ -225,8 +244,14 @@
                  :isSelfHosted p/self-hosted?
                  :registerCodeExecutionExtension p/register-code-execution-extension
                  :getClojureVarUnderCursor eu/get-var-under-cursor
-                 :executeCode p/execute-code
-                 :executeCodeInNs p/execute-code-in-ns
+
+                 :executeCode
+                 (fn [code options]
+                   (p/execute-code code (or (js->clj options :keywordize-keys true) {})))
+
+                 :executeCodeInNs
+                 (fn [code options]
+                   (p/execute-code-in-ns code (or (js->clj options :keywordize-keys true) {})))
 
                  ; Utility functions
                  :parseEdn (get-bind edn-reader :parse)
@@ -246,7 +271,3 @@
                                                   #js {:dismissable true})]
   (js/console.log "proto-repl loaded")
   (js/setTimeout #(.dismiss notification) 1000))
-
-(comment
-  js/process.pid
-  nil)

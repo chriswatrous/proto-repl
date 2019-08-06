@@ -22,13 +22,11 @@
    (some-> (state-get :repl) (.executeCode (str code) (clj->js (or options {}))))))
 
 
-(defn execute-code-in-ns [code options]
-  (when-let [editor (.getActiveTextEditor js/atom.workspace)]
-    (let [ns- (.findNsDeclaration editor-utils editor)]
-      (execute-code code (-> options
-                             (or {})
-                             (js->clj :keywordize-keys)
-                             (cond-> ns- (assoc :ns ns-)))))))
+(defn execute-code-in-ns
+  ([code] (execute-code-in-ns code {}))
+  ([code options]
+   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
+     (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
 (defn info [text] (some-> (state-get :repl) (.info text)))
@@ -62,7 +60,6 @@
                                  :ink nil
                                  :extensions-feature nil})
    :proto-repl.repl/emitter (Emitter.)}
-  (repl/create)
 
   (defprotocol ReplView
     (doc [this text])

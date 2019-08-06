@@ -1,8 +1,10 @@
 (ns proto-repl.commands
-  (:require [clojure.pprint :as pp]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
-            [proto-repl.plugin :refer [execute-code
+            [proto-repl.plugin :refer [doc
+                                       execute-code
                                        execute-code-in-ns
                                        info
                                        self-hosted?
@@ -23,15 +25,17 @@
     (js/setTimeout #(.destroy marker) 350)))
 
 
-(defn execute-block [options]
-  (when-let [editor (.getActiveTextEditor js/atom.workspace)]
-    (when-let [range (.getCursorInBlockRange editor-utils editor (clj->js options))]
-      (flash-highlight-range editor range)
-      (let [text (-> editor (.getTextInBufferRange range) .trim)
-            options (assoc options :displayCode text
-                                   :inlineOptions {:editor editor
-                                                   :range range})]
-        (execute-code-in-ns text options)))))
+(defn execute-block
+  ([] (execute-block {}))
+  ([options]
+   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
+     (when-let [range (.getCursorInBlockRange editor-utils editor (clj->js options))]
+       (flash-highlight-range editor range)
+       (let [text (-> editor (.getTextInBufferRange range) .trim)
+             options (assoc options :displayCode text
+                                    :inlineOptions {:editor editor
+                                                    :range range})]
+         (execute-code-in-ns text options))))))
 
 
 (defn execute-selected-text
@@ -163,7 +167,7 @@
 
 
 (defn refresh-namespaces
-  "Refreshes any changed code in the project since the last refresh. Presumes
+  "Refresh any changed code in the project since the last refresh. Presumes
   clojure.tools.namespace is a dependency and setup with standard user/reset
   function. Will invoke the optional callback if refresh is successful."
   ([] (refresh-namespaces nil))
@@ -174,6 +178,23 @@
          (execute-code refresh-namespaces-code
                        {:displayInRepl false
                         :resultHandler #(refresh-result-handler % callback)})))))
+
+
+(defn super-refresh-namespaces
+  "Refresh all of the code in the project whether it has changed or not.
+  Presumes clojure.tools.namespace is a dependency and setup with standard
+  user/reset function. Will invoke the optional callback if refresh is
+  successful."
+  ([] (super-refresh-namespaces nil))
+  ([callback]
+   (if (self-hosted?)
+     (stderr "Refreshing not supported in self hosted REPL.")
+     (do (info "Refreshing code...")
+         (execute-code '(when (find-ns 'clojure.tools.namespace.repl)
+                          (eval '(clojure.tools.namespace.repl/clear)))
+                       {:displayInRepl false
+                        :resultHandler #(refresh-result-handler % callback)})))))
+
 
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -242,3 +263,101 @@
 (defn toggle-auto-scroll []
   (let [key "proto-repl.autoScroll"]
     (.set js/atom.config key (not (.get js/atom.config key)))))
+
+
+(defn load-current-file []
+  (when-let [editor (get-active-text-editor)]
+    (if (self-hosted?)
+      (stderr "Loading files is not supported yet in self hosted REPL.")
+      (let [filename (.getPath editor)]
+        (execute-code `(do (~'println "Loading File " ~filename)
+                           (~'load-file ~filename)))))))
+
+
+(defn run-tests-in-namespace []
+  (when-let [editor (get-active-text-editor)]
+    (if (self-hosted?)
+      (stderr "Running tests is not supported yet in self hosted REPL.")
+      (let [run #(execute-code-in-ns '(clojure.test/run-tests))]
+        (if (js/atom.config.get "proto-repl.refreshBeforeRunningTestFile")
+          (refresh-namespaces run)
+          (run))))))
+
+
+(defn run-test-under-cursor []
+  (when-let [editor (get-active-text-editor)]
+    (if (self-hosted?)
+      (stderr "Running tests is not supported yet in self hosted REPL.")
+      (when-let [test-name (get-var-under-cursor editor)]
+        (let [run #(execute-code
+                     `(do (clojure.test/test-vars [(var ~test-name)])
+                          (~'println "tested" ~test-name)))]
+          (if (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
+            (refresh-namespaces run)
+            (run)))))))
+
+
+(defn run-all-tests [] ((state-get :runAllTests))
+  (if (self-hosted?)
+    (stderr "Running tests is not supported yet in self hosted REPL.")
+    (refresh-namespaces
+      #(execute-code '(def all-tests-future (future (time (clojure.test/run-all-tests))))))))
+
+
+(defn- remove-dashes [s] (str/replace s #"^-+\n" ""))
+
+
+(defn- get-doc-code []
+  (if (self-hosted?)
+    `(clojure.core/with-out-str (~'doc ~(symbol var-name)))
+    `(do
+       (clojure.core/require 'clojure.repl)
+       (clojure.core/with-out-str (clojure.repl/doc ~(symbol var-name))))))
+
+
+(defn- parse-doc-result [value]
+  (remove-dashes (if (self-hosted?) (edn/read-string value) value)))
+
+
+(defn- show-doc-result-inline [result var-name editor]
+  (when (and (state-get :ink) (js/atom.config.get "proto-repl.showInlineResults"))
+    (let [range (doto (.getSelectedBufferRange editor)
+                  (lodash.set "end.column" ##Inf))]
+      ((.makeInlineHandler (state-get :repl) range
+                           (fn [v] #js [var-name nil [(parse-doc-result v)]]))
+       result))))
+
+
+(defn- show-doc-result-in-console [result var-name]
+  (cond result.value (let [msg (str/trim (parse-doc-result result.value))]
+                       (if (empty? msg)
+                         (stderr (str "No doc found for " var-name))
+                         (doc msg)))
+        result.error (stderr result.error)
+        :else (stderr (str "Did not get value or error from eval result:\n"
+                           result))))
+
+
+(defn- show-doc-result [result var-name editor]
+  (show-doc-result-inline result var-name editor)
+  (show-doc-result-in-console result var-name))
+
+
+(defn print-var-documentation []
+  (when-let [editor (get-active-text-editor)]
+    (when-let [var-name (get-var-under-cursor editor)]
+      (execute-code-in-ns (get-doc-code)
+                          {:displayInRepl false
+                           :resultHandler #(show-doc-result % var-name editor)}))))
+
+
+(comment
+  (do clojure.core/require)
+  (do ::x))
+
+
+(defn list-ns-vars-with-docs [] ((state-get :listNsVarsWithDocs)))
+(defn list-ns-vars [] ((state-get :listNsVars)))
+(defn open-file-containing-var [] ((state-get :openFileContainingVar)))
+(defn print-var-code [] ((state-get :printVarCode)))
+(defn remote-nrepl-focus-next [] ((state-get :remoteNreplFocusNext)))

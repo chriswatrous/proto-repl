@@ -23,118 +23,6 @@ module.exports =
   saveRecallFeature: null
   extensionsFeature: null
 
-  # refreshNamespacesCommand:
-  #   "(do
-  #     (try
-  #       (require 'user)
-  #       (catch java.io.FileNotFoundException e
-  #         (println (str \"No user namespace defined. Defaulting to clojure.tools.namespace.repl/refresh.\\n\"))))
-  #     (try
-  #       (require 'clojure.tools.namespace.repl)
-  #       (catch java.io.FileNotFoundException e
-  #         (println \"clojure.tools.namespace.repl not available. Add proto-repl in your project.clj as a dependency to allow refresh. See https://clojars.org/proto-repl\")))
-  #     (let [user-reset 'user/reset
-  #           ctnr-refresh 'clojure.tools.namespace.repl/refresh
-  #           result (cond
-  #                    (find-var user-reset)
-  #                    ((resolve user-reset))
-  #
-  #                    (find-var ctnr-refresh)
-  #                    ((resolve ctnr-refresh))
-  #
-  #                    :else
-  #                     (println (str \"You can use your own refresh function, just define reset function in user namespace\\n\"
-  #                                   \"See this https://github.com/clojure/tools.namespace#reloading-code-motivation for why you should use it\")))]
-  #       (when (isa? (type result) Exception)
-  #         (println (.getMessage result)))
-  #       result))"
-
-  # refreshResultHandler: (callback, result)->
-  #   # Value will contain an exception if it's not valid otherwise it will be nil
-  #   # nil will also be returned if there is no clojure.tools.namespace available.
-  #   # The callback will still be invoked in that case. That's important so that
-  #   # run all tests will still work without it.
-  #   if result.value
-  #     window.protoRepl.info("Refresh complete")
-  #     # Make sure the extension process is running after ever refresh.
-  #     # If refreshing or laoding code had failed the extensions feature might not
-  #     # have stopped itself.
-  #     @extensionsFeature.startExtensionRequestProcessing()
-  #     callback() if callback
-  #   else if result.error
-  #     window.protoRepl.stderr("Refresh Warning: " + result.error)
-
-  # Refreshes any changed code in the project since the last refresh. Presumes
-  # clojure.tools.namespace is a dependency and setup with standard user/reset
-  # function. Will invoke the optional callback if refresh is successful.
-  refreshNamespaces: (callback=null)->
-    if window.protoRepl.isSelfHosted()
-      window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
-    else
-      window.protoRepl.info("Refreshing code...\n")
-      window.protoRepl.executeCode @refreshNamespacesCommand,
-        displayInRepl: false,
-        resultHandler: (result)=>
-          @refreshResultHandler(callback, result)
-
-  # Refreshes all of the code in the project whether it has changed or not.
-  # Presumes clojure.tools.namespace is a dependency and setup with standard
-  # user/reset function. Will invoke the optional callback if refresh is
-  # successful.
-  superRefreshNamespaces: (callback=null)->
-    if window.protoRepl.isSelfHosted()
-      window.protoRepl.stderr("Refreshing not supported in self hosted REPL.")
-    else
-      window.protoRepl.info("Clearing all and then refreshing code...\n")
-      window.protoRepl.executeCode "(do
-                      (when (find-ns 'clojure.tools.namespace.repl)
-                        (eval '(clojure.tools.namespace.repl/clear)))
-                      #{@refreshNamespacesCommand})",
-        displayInRepl: false,
-        resultHandler: (result)=> @refreshResultHandler(callback, result)
-
-  loadCurrentFile: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if window.protoRepl.isSelfHosted()
-        window.protoRepl.stderr("Loading files is not supported yet in self hosted REPL.")
-      else
-        # Escape file name
-        fileName = editor.getPath().replace(/\\/g,"\\\\")
-        window.protoRepl.executeCode("(do (println \"Loading File #{fileName}\") (load-file \"#{fileName}\"))")
-
-  runTestsInNamespace: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if window.protoRepl.isSelfHosted()
-        window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
-      else
-        code = "(clojure.test/run-tests)"
-        if atom.config.get("proto-repl.refreshBeforeRunningTestFile")
-          @refreshNamespaces =>
-            window.protoRepl.executeCodeInNs(code)
-        else
-          window.protoRepl.executeCodeInNs(code)
-
-  runTestUnderCursor: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if window.protoRepl.isSelfHosted()
-        window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
-      else
-        if testName = window.protoRepl.getClojureVarUnderCursor(editor)
-          code = "(do (clojure.test/test-vars [#'#{testName}]) (println \"tested #{testName}\"))"
-          if atom.config.get("proto-repl.refreshBeforeRunningSingleTest")
-            @refreshNamespaces =>
-              window.protoRepl.executeCodeInNs(code)
-          else
-            window.protoRepl.executeCodeInNs(code)
-
-  runAllTests: ->
-    if window.protoRepl.isSelfHosted()
-      window.protoRepl.stderr("Running tests is not supported yet in self hosted REPL.")
-    else
-      @refreshNamespaces =>
-        # Tests are only run if the refresh is successful.
-        window.protoRepl.executeCode("(def all-tests-future (future (time (clojure.test/run-all-tests))))")
-
   printVarDocumentation: ->
     if editor = atom.workspace.getActiveTextEditor()
       if varName = window.protoRepl.getClojureVarUnderCursor(editor)
@@ -152,7 +40,7 @@ module.exports =
           range = editor.getSelectedBufferRange()
           range.end.column = Infinity
           inlineHandler = @repl.makeInlineHandler(editor, range, (value)=>
-            [varName, {a: 1}, [parser(value)]])
+            [varName, nil, [parser(value)]])
 
         handled = false
 

@@ -307,16 +307,22 @@
 (defn- remove-dashes [s] (str/replace s #"^-+\n" ""))
 
 
-(defn- get-doc-code []
-  (if (self-hosted?)
-    `(clojure.core/with-out-str (~'doc ~(symbol var-name)))
-    `(do
-       (clojure.core/require 'clojure.repl)
-       (clojure.core/with-out-str (clojure.repl/doc ~(symbol var-name))))))
+(defn- get-doc-code [var-name]
+  (-> (if (self-hosted?)
+        '(clojure.core/with-out-str (doc var-name))
+        '(do
+           (require 'clojure.repl)
+           (with-out-str (clojure.repl/doc var-name))))
+      str
+      (str/replace #"var-name" var-name)))
+
+
+(comment
+  (get-doc-code "abcd"))
 
 
 (defn- parse-doc-result [value]
-  (remove-dashes (if (self-hosted?) (edn/read-string value) value)))
+  (remove-dashes (if (self-hosted?) value (edn/read-string value))))
 
 
 (defn- show-doc-result-inline [result var-name editor]
@@ -343,21 +349,62 @@
   (show-doc-result-in-console result var-name))
 
 
+; This is to prevent the result handler from running more than once on error.
+(defn- once [f]
+  (let [count (atom 0)]
+    (fn [& args]
+      (when (= (swap! count inc) 1)
+        (apply f args)))))
+
+
 (defn print-var-documentation []
   (when-let [editor (get-active-text-editor)]
     (when-let [var-name (get-var-under-cursor editor)]
-      (execute-code-in-ns (get-doc-code)
+      (execute-code-in-ns (get-doc-code var-name)
                           {:displayInRepl false
-                           :resultHandler #(show-doc-result % var-name editor)}))))
+                           :resultHandler (once #(show-doc-result % var-name editor))}))))
 
 
-(comment
-  (do clojure.core/require)
-  (do ::x))
+(defn print-var-code [] nil
+  (when-let [editor (get-active-text-editor)]
+    (when-let [var-name (get-var-under-cursor editor)]
+      (if (self-hosted?)
+        (stderr "Showing source code is not yet supported in self hosted REPL.")
+        (execute-code-in-ns `(do
+                               (~'require 'clojure.repl)
+                               (~'with-out-str (clojure.repl/source ~(symbol var-name))))
+                            {:displayInRepl false
+                             :resultHandler (once #(show-doc-result % var-name editor))})))))
+
+
+(defn- list-ns-vars-code [ns-name]
+  (-> '(do
+         (require 'clojure.repl)
+         (let [selected-symbol 'ns-name
+               selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
+           (str "Vars in " selected-ns ":\n"
+                "------------------------------\n"
+                (str/join "\n" (clojure.repl/dir-fn selected-ns)))))
+      str
+      (str/replace #"ns-name" ns-name)))
+
+
+(defn list-ns-vars
+  "Lists all the vars in the selected namespace or namespace alias"
+  []
+  (when-let [editor (get-active-text-editor)]
+    (when-let [ns-name (get-var-under-cursor editor)]
+      (println {:ns-name ns-name})
+      (if (self-hosted?)
+        (stderr "Listing namespace functions is not yet supported in self hosted REPL.")
+        (execute-code-in-ns (list-ns-vars-code ns-name)
+                            {:displayInRepl false
+                             :resultHandler (once #(show-doc-result % ns-name editor))})))))
+
 
 
 (defn list-ns-vars-with-docs [] ((state-get :listNsVarsWithDocs)))
-(defn list-ns-vars [] ((state-get :listNsVars)))
 (defn open-file-containing-var [] ((state-get :openFileContainingVar)))
-(defn print-var-code [] ((state-get :printVarCode)))
 (defn remote-nrepl-focus-next [] ((state-get :remoteNreplFocusNext)))
+
+(comment)

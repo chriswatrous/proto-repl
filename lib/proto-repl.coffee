@@ -23,33 +23,6 @@ module.exports =
   saveRecallFeature: null
   extensionsFeature: null
 
-  # Lists all the vars with their documentation in the selected namespace or namespace alias
-  listNsVarsWithDocs: ->
-    if editor = atom.workspace.getActiveTextEditor()
-      if nsName = window.protoRepl.getClojureVarUnderCursor(editor)
-        if window.protoRepl.isSelfHosted()
-          # code = "(dir #{nsName})"
-          window.protoRepl.stderr("Listing namespace functions is not yet supported in self hosted REPL.")
-        else
-          code = "(do
-                    (require 'clojure.repl)
-                    (let [selected-symbol '#{nsName}
-                          selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
-                      (println (str \"\\n\" selected-ns \":\"))
-                      (println \"\" (:doc (meta (the-ns selected-ns))))
-                      (doseq [s (clojure.repl/dir-fn selected-ns) :let [m (-> (str selected-ns \"/\" s) symbol find-var meta)]]
-                        (println \"---------------------------\")
-                        (println (:name m))
-                        (cond
-                          (:forms m) (doseq [f (:forms m)]
-                                       (print \"  \")
-                                       (prn f))
-                          (:arglists m) (prn (:arglists m)))
-                        (println \" \" (:doc m)))
-                      (println \"------------------------------\")))"
-
-          window.protoRepl.executeCodeInNs(code)
-
   # Opens the file containing the currently selected var or namespace in the REPL. If the file is located
   # inside of a jar file it will decompress the jar file then open it. It will first check to see if a
   # jar file has already been decompressed once to avoid doing it multiple times for the same library.

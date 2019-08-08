@@ -402,9 +402,46 @@
                              :resultHandler (once #(show-doc-result % ns-name editor))})))))
 
 
+(defn list-ns-vars-with-docs-code [ns-name]
+  (-> '(do
+         (require 'clojure.repl)
+         (require 'clojure.string)
+         (let [selected-symbol 'ns-name
+               selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
+           (str selected-ns ":\n"
+                " " (:doc (meta (the-ns selected-ns))) "\n"
+                (clojure.string/join
+                  "\n"
+                  (for [s (clojure.repl/dir-fn selected-ns)
+                        :let [m (-> (str selected-ns "/" s) symbol find-var meta)]]
+                    (str "---------------------------\n"
+                         (:name m) "\n"
+                         (cond
+                           (:forms m) (->> (:forms m)
+                                           (map #(str "  " (pr-str %)))
+                                           (clojure.string/join "\n"))
+                           (:arglists m) (pr-str (:arglists m)))
+                         "\n  " (:doc m)))))))
+      str
+      (str/replace #"ns-name" ns-name)))
 
-(defn list-ns-vars-with-docs [] ((state-get :listNsVarsWithDocs)))
+
+(defn list-ns-vars-with-docs
+  "Lists all the vars with their documentation in the selected namespace or namespace alias"
+  []
+  (when-let [editor (get-active-text-editor)]
+    (when-let [ns-name (get-var-under-cursor editor)]
+      (println {:ns-name ns-name})
+      (if (self-hosted?)
+        (stderr "Listing namespace functions is not yet supported in self hosted REPL.")
+        (execute-code-in-ns (list-ns-vars-with-docs-code ns-name)
+                            {:displayInRepl false
+                             :resultHandler (once #(show-doc-result % ns-name editor))})))))
+
+(comment
+  (list-ns-vars-with-docs))
+
+
+; (defn list-ns-vars-with-docs [] ((state-get :listNsVarsWithDocs)))
 (defn open-file-containing-var [] ((state-get :openFileContainingVar)))
 (defn remote-nrepl-focus-next [] ((state-get :remoteNreplFocusNext)))
-
-(comment)

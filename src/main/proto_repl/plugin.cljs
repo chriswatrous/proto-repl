@@ -1,17 +1,17 @@
 (ns proto-repl.plugin
   (:require [proto-repl.utils :refer [get-bind]]))
 
-(def ^:private lodash (js/require "lodash"))
-(def ^:private proto-repl (js/require "../lib/proto-repl"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 
 
+(defonce state (atom {}))
+
+
 (defn state-merge! [m]
-  (doseq [[k v] m]
-    (lodash.set proto-repl (name k) v)))
+  (swap! state merge m))
 
 
-(defn state-get [key] (get-bind proto-repl key))
+(defn state-get [key] (@state key))
 
 
 (defn execute-code

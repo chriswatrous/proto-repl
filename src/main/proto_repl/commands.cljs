@@ -438,10 +438,100 @@
                             {:displayInRepl false
                              :resultHandler (once #(show-doc-result % ns-name editor))})))))
 
-(comment
-  (list-ns-vars-with-docs))
+
+(defn open-file-containing-var-code [var-name]
+  (->
+    '(do
+       (require 'clojure.repl)
+       (require 'clojure.java.shell)
+       (require 'clojure.java.io)
+       (import [java.io File])
+       (import [java.util.jar JarFile])
+       (let [path-endings
+             (fn [path]
+               (let [path (str/replace path #"^/" "")]
+                 (cons path (lazy-seq (let [next-path (-> path (str/split #"/" 2) (get 1))]
+                                        (if (seq next-path) (path-endings next-path) nil))))))
+             get-resource
+             (fn [file]
+               (-> file java.io.File. .toURI .getPath path-endings
+                   (->> (keep #(.getResource (clojure.lang.RT/baseLoader) %))
+                        first)))
+             resource->file-path
+             (fn [res]
+               (when res
+                 (let [uri (-> res .toURI .normalize)]
+                   (if (.isOpaque uri)
+                     (let [url (.toURL uri)
+                           conn (.openConnection url)
+                           file (java.io.File. (.. conn getJarFileURL toURI))]
+                       (str (.getAbsolutePath file) "!"
+                            (second (clojure.string/split (.getPath url) #"!"))))
+                     (.getAbsolutePath (java.io.File. uri))))))
+             var-sym 'var-name
+             the-var (-> (get (ns-aliases *ns*) var-sym)
+                         (or (find-ns var-sym))
+                         (some->> clojure.repl/dir-fn
+                                  first
+                                  name
+                                  (str (name var-sym) "/")
+                                  symbol)
+                         (or var-sym))
+             {:keys [file line protocol]} (meta (eval `(var ~the-var)))
+             _ (when (and (nil? file) protocol)
+                 (throw (Exception. (str "The var " var-sym " is part of a protocol which "
+                                         "Proto REPL is currently unable to open."))))
+             res (get-resource file)
+             file-path (resource->file-path res)]
+         (if-let [[_ jar-path partial-jar-path within-file-path]
+                  (re-find #"(.+\.m2.repository.(.+\.jar))!/(.+)" file-path)]
+           (let [decompressed-path (-> (str (System/getProperty "user.home")
+                                            "/.lein/tmp-atom-jars/" partial-jar-path)
+                                       File. .getAbsolutePath)
+                 decompressed-file-path (.getAbsolutePath
+                                          (File. decompressed-path within-file-path))
+                 decompressed-path-dir (clojure.java.io/file decompressed-path)]
+             (when-not (.exists decompressed-path-dir)
+               (println "decompressing" jar-path "to" decompressed-path)
+               (.mkdirs decompressed-path-dir)
+               (let [jar-file (JarFile. jar-path)]
+                 (run! (fn [jar-entry]
+                         (let [file (File. decompressed-path (.getName jar-entry))]
+                           (when-not (.isDirectory jar-entry)
+                             (.mkdirs (.getParentFile file))
+                             (with-open [is (.getInputStream jar-file jar-entry)]
+                               (clojure.java.io/copy is file)))))
+                       (seq (.toArray (.stream jar-file))))))
+             [decompressed-file-path line])
+           [file-path line])))
+    str
+    (str/replace #"var-name" var-name)))
 
 
-; (defn list-ns-vars-with-docs [] ((state-get :listNsVarsWithDocs)))
-(defn open-file-containing-var [] ((state-get :openFileContainingVar)))
-(defn remote-nrepl-focus-next [] ((state-get :remoteNreplFocusNext)))
+(defn- handle-open-file-result [result]
+  (if result.value
+    (do
+      (info (str "Opening " result.value))
+      (let [[file line] (edn/read-string result.value)
+            file (str/replace file #"%20" " ")]
+        (.open js/atom.workspace file #js {:initialLine (- line 1)
+                                           :searchAllPanes true})))))
+
+
+(defn open-file-containing-var
+  "Opens the file containing the currently selected var or namespace in the
+  REPL. If the file is located inside of a jar file it will decompress the
+  jar file then open it. It will first check to see if a jar file has already
+  been decompressed once to avoid doing it multiple times for the same library."
+  []
+  (when-let [editor (get-active-text-editor)]
+    (when-let [var-name (get-var-under-cursor editor)]
+      (if (self-hosted?)
+        (stderr "Opening files containing vars is not yet supported in self hosted REPL.")
+        (execute-code-in-ns (open-file-containing-var-code var-name)
+                            {:displayInRepl false
+                             :resultHandler (once handle-open-file-result)})))))
+
+
+(defn remote-nrepl-focus-next []
+  (some-> (state-get :connectionView) .toggleFocus))

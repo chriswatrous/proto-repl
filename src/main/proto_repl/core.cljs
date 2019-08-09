@@ -233,41 +233,32 @@
 
 (set!
   js/window.protoRepl
-  (-> proto-repl
-      lodash.clone
-      lodash.bindAll
-      (js/Object.assign
-        #js
-        {:onDidConnect #(.on (state-get :emitter) "proto-repl:connected" %)
-         :onDidClose #(.on (state-get :emitter) "proto-repl:closed" %)
-         :onDidStop #(.on (state-get :emitter) "proto-repl:stopped" %)
-         :running #(.running (state-get :repl))
-         :getReplType #(.getType (state-get :repl))
-         :isSelfHosted p/self-hosted?
-         :registerCodeExecutionExtension p/register-code-execution-extension
-         :getClojureVarUnderCursor eu/get-var-under-cursor
-         :executeCode #(p/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
-         :executeCodeInNs #(p/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
+  #js {:onDidConnect #(.on (state-get :emitter) "proto-repl:connected" %)
+       :onDidClose #(.on (state-get :emitter) "proto-repl:closed" %)
+       :onDidStop #(.on (state-get :emitter) "proto-repl:stopped" %)
+       :running #(.running (state-get :repl))
+       :getReplType #(.getType (state-get :repl))
+       :isSelfHosted p/self-hosted?
+       :registerCodeExecutionExtension p/register-code-execution-extension
+       :getClojureVarUnderCursor eu/get-var-under-cursor
+       :executeCode #(p/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
+       :executeCodeInNs #(p/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
 
-         ; Utility functions
-         :parseEdn (get-bind edn-reader :parse)
-         :prettyEdn u/pretty-edn
-         :ednToDisplayTree u/edn->display-tree
-         :jsToEdn u/js->edn
-         :ednSavedValuesToDisplayTrees u/edn-saved-values->display-trees
+       ; Utility functions
+       :parseEdn (get-bind edn-reader :parse)
+       :prettyEdn u/pretty-edn
+       :ednToDisplayTree u/edn->display-tree
+       :jsToEdn u/js->edn
+       :ednSavedValuesToDisplayTrees u/edn-saved-values->display-trees
 
-         ; Helpers for adding text to the REPL.
-         :info p/info
-         :stderr p/stderr
-         :stdout p/stdout
-         :doc p/doc})))
+       ; Helpers for adding text to the REPL.
+       :info p/info
+       :stderr p/stderr
+       :stdout p/stdout
+       :doc p/doc})
 
 
 (let [notification (js/atom.notifications.addInfo "proto-repl loaded"
                                                   #js {:dismissable true})]
   (js/console.log "proto-repl loaded")
   (js/setTimeout #(.dismiss notification) 1000))
-
-
-(comment
-  (do js/process.pid))

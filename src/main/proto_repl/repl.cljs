@@ -46,9 +46,18 @@ You can disable this help text in the settings.")
                                repl-view]
   Repl
   (clear [this] (-> this :repl-view .clear))
+  (running? [this] (-> this :process deref .running))
+  ; (running? [this] (.running @(:process this)))
+
   (interrupt [this]
     (-> this :loading-indicator .clearAll)
-    (-> this :process .interrupt))
+    (-> this :process deref .interrupt))
+
+  (exit [this]
+    (when (running? this)
+      (info this "Stopping REPL")
+      (-> this :process deref .stop)))
+      ; (-> this :process (reset! nil))))
 
   (doc [this text] (-> this :repl-view (.doc text)))
   (info [this text] (-> this :repl-view (.info text)))
@@ -61,15 +70,18 @@ You can disable this help text in the settings.")
     (let [repl (proto-repl.plugin/state-get :repl)]
       (map->ReplImpl
         {:repl-view (.-replView repl)
-         :process (.-process repl)
+         :process (atom (.-process repl))
          :loading-indicator (.-loadingIndicator repl)})))
+
+  (running? r)
+  (clear r)
+  (interrupt r)
+  (exit r)
 
   (stderr r "Qwer\n")
   (stdout r "Qwer\n")
   (doc r "Qwer\n")
-  (info r "Qwer\n")
-  (clear r)
-  (interrupt r))
+  (info r "Qwer\n"))
 
 
 (defn make-repl [{:keys [ink on-did-close on-did-start on-did-stop]

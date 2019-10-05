@@ -8,16 +8,18 @@
 
 
 (defprotocol Repl
-  (doc [this text])
-  (info [this text])
-  (stderr [this text])
-  (stdout [this text])
+  (clear [this])
   (execute-code [this options])
   (exit [this])
   (get-repl-type [this])
   (interrupt [this])
   (running? [this])
-  (self-hosted? [this]))
+  (self-hosted? [this])
+
+  (doc [this text])
+  (info [this text])
+  (stderr [this text])
+  (stdout [this text]))
 
 
 (def ^:private repl-help-text "REPL Instructions
@@ -36,23 +38,38 @@ Executes the selection. Sends the selected text to the REPL.
 You can disable this help text in the settings.")
 
 
-(defrecord ^:private ReplImpl [emitter extensions-feature ink repl-view]
+(defrecord ^:private ReplImpl [emitter
+                               extensions-feature
+                               ink
+                               loading-indicator
+                               process
+                               repl-view]
   Repl
-  (info [this text] (.info (:repl-view this) text))
-  (doc [this text] (.doc (:repl-view this) text))
-  (stdout [this text] (.stdout (:repl-view this) text))
-  (stderr [this text] (.stderr (:repl-view this) text)))
+  (clear [this] (-> this :repl-view .clear))
+  (interrupt [this]
+    (-> this :loading-indicator .clearAll)
+    (-> this :process .interrupt))
 
-  ; (execute-code [this code options]
-  ;   (when [(:running (deref (:state this)))])))
-
+  (doc [this text] (-> this :repl-view (.doc text)))
+  (info [this text] (-> this :repl-view (.info text)))
+  (stderr [this text] (-> this :repl-view (.stderr text)))
+  (stdout [this text] (-> this :repl-view (.stdout text))))
 
 
 (comment
-  (def r (map->ReplImpl
-           {:repl-view (-> :repl proto-repl.plugin/state-get .-replView)}))
+  (def r
+    (let [repl (proto-repl.plugin/state-get :repl)]
+      (map->ReplImpl
+        {:repl-view (.-replView repl)
+         :process (.-process repl)
+         :loading-indicator (.-loadingIndicator repl)})))
 
-  (stderr r "Qwer\n"))
+  (stderr r "Qwer\n")
+  (stdout r "Qwer\n")
+  (doc r "Qwer\n")
+  (info r "Qwer\n")
+  (clear r)
+  (interrupt r))
 
 
 (defn make-repl [{:keys [ink on-did-close on-did-start on-did-stop]

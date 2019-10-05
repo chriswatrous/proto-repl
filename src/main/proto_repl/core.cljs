@@ -3,11 +3,10 @@
             [proto-repl.commands :as c]
             [proto-repl.editor-utils :as eu]
             [proto-repl.plugin :as p :refer [state-merge! state-get]]
-            [proto-repl.utils :as u :refer [get-bind]]))
-
+            [proto-repl.utils :as u :refer [get-bind]]
+            [proto-repl.integration.core]))
 
 (def ^:private lodash (js/require "lodash"))
-(def ^:private proto-repl (js/require "../lib/proto-repl"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
 (def ^:private SaveRecallFeature (js/require "../lib/features/save-recall-feature"))
@@ -170,8 +169,8 @@
 (defn- activate []
   (state-merge! {:subscriptions (CompositeDisposable.)
                  :emitter (Emitter.)
-                 :saveRecallFeature (SaveRecallFeature. js/window.proto-repl)
-                 :extensionsFeature (ExtensionsFeature. js/window.proto-repl)})
+                 :saveRecallFeature (SaveRecallFeature.)
+                 :extensionsFeature (ExtensionsFeature.)})
   (.add (state-get :subscriptions)
         (.add
           js/atom.commands

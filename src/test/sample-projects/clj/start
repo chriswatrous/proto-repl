@@ -1,0 +1,3 @@
+#!/bin/bash
+
+clj -m nrepl.cmdline --port 2345

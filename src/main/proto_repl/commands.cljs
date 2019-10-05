@@ -10,7 +10,8 @@
                                        self-hosted?
                                        state-get
                                        state-merge!
-                                       stderr]]))
+                                       stderr]]
+            [proto-repl.repl]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -213,6 +214,19 @@
                          (.emit (state-get :emitter) "proto-repl:stopped"))))))
 
 
+(defn- repl-args []
+  (let [pane (.getActivePane js/atom.workspace)]
+    {:ink (state-get :ink)
+     :on-did-close (fn [] (state-merge! {:repl nil})
+                          (.emit (state-get :emitter) "proto-repl:closed"))
+     :on-did-start (fn [] (.emit (state-get :emitter) "proto-repl:connected")
+                          (when (.get js/atom.config "proto-repl.refreshOnReplStart")
+                            (refresh-namespaces))
+                          (.activate pane))
+     :on-did-stop (fn [] (.stopExtensionRequestProcessing (state-get :extensionsFeature))
+                         (.emit (state-get :emitter) "proto-repl:stopped"))}))
+
+
 (defn toggle
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
@@ -237,7 +251,6 @@
 (defn remote-nrepl-connection
   "Open the nRepl connection dialog."
   []
-  ; (when-not (state-get :connectionView)
   (state-merge!
     {:connectionView
      (doto (NReplConnectionView.

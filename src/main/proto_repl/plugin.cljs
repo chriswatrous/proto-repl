@@ -1,5 +1,4 @@
-(ns proto-repl.plugin
-  (:require [proto-repl.utils :refer [get-bind]]))
+(ns proto-repl.plugin)
 
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 

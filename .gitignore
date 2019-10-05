@@ -4,3 +4,4 @@ node_modules
 .nrepl-port
 target
 .shadow-cljs
+.cpcache

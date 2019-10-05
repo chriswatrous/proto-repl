@@ -8,7 +8,7 @@
 
 
 (defn get-var-under-cursor [editor]
-  (let [word (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_]+"})]
+  (let [word (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"})]
     (if (seq word)
       word
       (do

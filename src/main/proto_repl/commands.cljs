@@ -246,8 +246,6 @@
           toggle))
 
 
-(defn spy [x] (do (println "spy:" x) x))
-
 (defn remote-nrepl-connection
   "Open the nRepl connection dialog."
   []
@@ -256,9 +254,9 @@
      (doto (NReplConnectionView.
              (fn [params]
                (when-not (state-get :repl)
-                 (state-merge! {:repl (spy (doto (Repl. (state-get :extensionsFeature))
-                                             prepare-repl
-                                             (.startRemoteReplConnection params)))
+                 (state-merge! {:repl (doto (Repl. (state-get :extensionsFeature))
+                                        prepare-repl
+                                        (.startRemoteReplConnection params))
                                 :connectionView nil}))))
        .show)}))
 
@@ -342,7 +340,7 @@
   (when (and (state-get :ink) (js/atom.config.get "proto-repl.showInlineResults"))
     (let [range (doto (.getSelectedBufferRange editor)
                   (lodash.set "end.column" ##Inf))]
-      ((.makeInlineHandler (state-get :repl) range
+      ((.makeInlineHandler (state-get :repl) editor range
                            (fn [v] #js [var-name nil [(parse-doc-result v)]]))
        result))))
 

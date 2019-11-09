@@ -257,7 +257,6 @@
        :doc p/doc})
 
 
-(let [notification (js/atom.notifications.addInfo "proto-repl loaded"
-                                                  #js {:dismissable true})]
+(let [notification (js/atom.notifications.addInfo "proto-repl loaded" #js {:dismissable true})]
   (js/console.log "proto-repl loaded")
   (js/setTimeout #(.dismiss notification) 1000))

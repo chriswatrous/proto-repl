@@ -1,4 +1,7 @@
-(ns proto-repl.utils)
+(ns proto-repl.utils
+  (:require [cljs.reader :as r]
+            [clojure.edn :as edn]
+            [fipp.edn :as fipp]))
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
@@ -9,9 +12,16 @@
     (if (lodash.isFunction value) (.bind value obj) value)))
 
 
+(r/register-default-tag-parser!
+  (fn [tag data] {(symbol "#" tag) data}))
+
+
 (defn pretty-edn [edn-string]
-  (try (.pretty_print edn-reader edn-string)
-       (catch :default err edn-string)))
+  (try
+    (with-out-str (fipp/pprint (edn/read-string edn-string)))
+    (catch :default err
+      (js/console.error "Error formatting repl result:" err)
+      edn-string)))
 
 
 (defn edn->display-tree

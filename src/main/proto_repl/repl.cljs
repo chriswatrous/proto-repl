@@ -105,7 +105,7 @@ You can disable this help text in the settings.")
 
 (comment
   (def r
-    (let [repl (proto-repl.plugin/state-get :repl)]
+    (let [repl (:repl @proto-repl.master/state)]
       (map->ReplImpl
         {:repl-view (.-replView repl)
          :process (atom (.-process repl))
@@ -115,8 +115,7 @@ You can disable this help text in the settings.")
   (do js/global.displayInlineArgs)
   (apply display-inline r js/global.displayInlineArgs)
 
-  (-> :repl
-      proto-repl.plugin/state-get
+  (-> @state :repl
       (.displayInline (aget js/global.displayInlineArgs 0)
                       (aget js/global.displayInlineArgs 1)
                       (aget js/global.displayInlineArgs 2)

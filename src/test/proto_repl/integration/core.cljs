@@ -7,7 +7,7 @@
             [promesa.core :as p]
             [promesa.async-cljs]
             ["util" :refer [inspect]]
-            [proto-repl.plugin :refer [state-get]]
+            [proto-repl.master :refer [state]]
             [proto-repl.editor-utils :refer [get-active-text-editor]])
   (:require-macros [cljs.core.async :refer [go]]
                    [promesa.core :as p :refer [await]]
@@ -59,12 +59,12 @@
 
 
 (defn get-cells []
-  (-> (state-get :repl) .-replView .-console .-items
+  (-> @state :repl .-replView .-console .-items
       (js->clj :keywordize-keys true)))
 
 
 (defn get-outputs []
-  (-> (state-get :repl) .-replView .-console .-items
+  (-> @state :repl .-replView .-console .-items
       (js->clj :keywordize-keys true)
       (->> (filterv #(not= (:type %) "input")))))
 
@@ -77,6 +77,7 @@
   (let [results (filter #(= (:type %) "result") (get-cells))]
     (assert (= (count results) 1))
     (first results)))
+
 
 (defn get-single-doc-cell []
   (let [results (filter #(= (:type %) "result") (get-cells))]))

@@ -2,7 +2,7 @@
   (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
             [proto-repl.commands :as c]
             [proto-repl.editor-utils :as eu]
-            [proto-repl.plugin :as p :refer [state-merge! state-get]]
+            [proto-repl.master :as p :refer [state]]
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.integration.core]))
 
@@ -158,7 +158,7 @@
                        :iconset "ion"
                        :callback "proto-repl:exit-repl"
                        :tooltip "Quit REPL"}))
-    (state-merge! {:toolbar tb})))
+    (swap! state assoc :toolbar tb)))
 
 
 (defn- provide-autocomplete []
@@ -167,11 +167,12 @@
 
 
 (defn- activate []
-  (state-merge! {:subscriptions (CompositeDisposable.)
-                 :emitter (Emitter.)
-                 :saveRecallFeature (SaveRecallFeature.)
-                 :extensionsFeature (ExtensionsFeature.)})
-  (.add (state-get :subscriptions)
+  (swap! state assoc
+         :subscriptions (CompositeDisposable.)
+         :emitter (Emitter.)
+         :saveRecallFeature (SaveRecallFeature.)
+         :extensionsFeature (ExtensionsFeature.))
+  (.add (:subscriptions @state)
         (.add
           js/atom.commands
           "atom-workspace"
@@ -206,19 +207,19 @@
 
 
 (defn- deactivate []
-  (.dispose (state-get :subscriptions))
-  (.deactivate (state-get :saveRecallFeature))
-  (state-merge! {:saveRecallFeature nil})
-  (some-> (state-get :toolbar) .removeItems)
-  (when (state-get :repl)
-    ((state-get :quitRepl))
-    (state-merge! {:repl nil})))
+  (-> @state :subscription .dispose)
+  (-> @state :saveRecallFeature .deactivate)
+  (swap! state assoc :saveRecallFeature nil)
+  (some-> @state :toolbar .removeItems)
+  (when (:repl @state)
+    ((:quitRepl @state))
+    (swap! state assoc :repl nil)))
 
 
 (defn- consume-ink [ink]
-  (state-merge! {:ink ink})
-  (some-> (state-get :repl) (.consumeInk ink))
-  (state-merge! {:loading (ink.Loading.)}))
+  (swap! state assoc :ink ink)
+  (some-> @state :repl (.consumeInk ink))
+  (swap! state assoc :loading (ink.Loading.)))
 
 
 (def exports
@@ -232,11 +233,11 @@
 
 (set!
   js/window.protoRepl
-  #js {:onDidConnect #(.on (state-get :emitter) "proto-repl:connected" %)
-       :onDidClose #(.on (state-get :emitter) "proto-repl:closed" %)
-       :onDidStop #(.on (state-get :emitter) "proto-repl:stopped" %)
-       :running #(.running (state-get :repl))
-       :getReplType #(.getType (state-get :repl))
+  #js {:onDidConnect #(-> @state :emitter (.on "proto-repl:connected" %))
+       :onDidClose #(-> @state :emitter (.on "proto-repl:closed" %))
+       :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
+       :running #(-> @state :repl .running)
+       :getReplType #(-> @state :repl .getType)
        :isSelfHosted p/self-hosted?
        :registerCodeExecutionExtension p/register-code-execution-extension
        :getClojureVarUnderCursor eu/get-var-under-cursor

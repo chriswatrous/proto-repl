@@ -1,4 +1,4 @@
-(ns proto-repl.plugin)
+(ns proto-repl.master)
 
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 
@@ -6,19 +6,12 @@
 (defonce state (atom {}))
 
 
-(defn state-merge! [m]
-  (swap! state merge m))
-
-
-(defn state-get [key] (@state key))
-
-
 (defn execute-code
   "Execute the given code string in the REPL. See Repl.executeCode for supported
   options."
   ([code] (execute-code code {}))
   ([code options]
-   (some-> (state-get :repl) (.executeCode (str code) (clj->js (or options {}))))))
+   (some-> @state :repl (.executeCode (str code) (clj->js (or options {}))))))
 
 
 (defn execute-code-in-ns
@@ -28,10 +21,10 @@
      (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
-(defn info [text] (some-> (state-get :repl) (.info text)))
-(defn stderr [text] (some-> (state-get :repl) (.stderr text)))
-(defn stdout [text] (some-> (state-get :repl) (.stdout text)))
-(defn doc [text] (some-> (state-get :repl) (.doc text)))
+(defn info [text] (some-> @state :repl (.info text)))
+(defn stderr [text] (some-> @state :repl (.stderr text)))
+(defn stdout [text] (some-> @state :repl (.stdout text)))
+(defn doc [text] (some-> @state :repl (.doc text)))
 
 
 (defn register-code-execution-extension
@@ -46,10 +39,10 @@
   The name will be used to locate the callback function. The third element in
   the vector will be passed to the callback function."
   [name callback]
-  (.registerCodeExecutionExtension (state-get :extensionsFeature) name callback))
+  (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
 
 
-(defn self-hosted? [] (.isSelfHosted (state-get :repl)))
+(defn self-hosted? [] (-> @state :repl .isSelfHosted))
 
 
 (comment

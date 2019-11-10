@@ -3,13 +3,12 @@
             [clojure.string :as str]
             ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
-            [proto-repl.plugin :refer [doc
+            [proto-repl.master :refer [doc
                                        execute-code
                                        execute-code-in-ns
                                        info
                                        self-hosted?
-                                       state-get
-                                       state-merge!
+                                       state
                                        stderr]]
             [proto-repl.repl]))
 
@@ -64,7 +63,7 @@
                        :range range}
        :displayInRepl false
        :resultHandler (fn [result options]
-                        (.inlineResultHandler (state-get :repl))
+                        (.inlineResultHandler (:repl @state))
                         (execute-ranges editor (rest ranges)))})))
 
 
@@ -75,7 +74,7 @@
 (defn autoeval-file
   "Turn on auto evaluation of the current file."
   []
-  (let [ink (state-get :ink)
+  (let [ink (:ink @state)
         editor (get-active-text-editor)]
     (cond (not (js/atom.config.get "proto-repl.showInlineResults"))
           (stderr "Auto Evaling is not supported unless inline results is enabled")
@@ -103,16 +102,16 @@
 
 
 (defn clear-repl []
-  (some-> (state-get :repl) .clear))
+  (some-> @state :repl .clear))
 
 
 (defn interrupt []
   "Interrupt the currently executing command."
-  (.interrupt (state-get :repl)))
+  (-> @state :repl .interrupt))
 
 
 (defn exit-repl []
-  (.exit (state-get :repl)))
+  (-> @state :repl .exit))
 
 
 (defn pretty-print
@@ -122,7 +121,7 @@
 
 
 (defn execute-text-entered-in-repl []
-  (some-> (state-get :repl) .executeEnteredText))
+  (some-> @state :repl .executeEnteredText))
 
 
 (def ^:private refresh-namespaces-code
@@ -161,7 +160,7 @@
             ; Make sure the extension process is running after ever refresh.
             ; If refreshing or loading code had failed the extensions feature might not
             ; have stopped itself.
-            (.startExtensionRequestProcessing (state-get :extensionsFeature))
+            (-> @state :extensionsFeature .startExtensionRequestProcessing)
             (when callback (callback)))
         result.error
         (stderr (str "Refresh Warning: " result.error))))
@@ -203,38 +202,40 @@
 (defn- prepare-repl [repl]
   (let [pane (.getActivePane js/atom.workspace)]
     (doto repl
-      (.consumeInk (state-get :ink))
-      (.onDidClose (fn [] (state-merge! {:repl nil})
-                          (.emit (state-get :emitter) "proto-repl:closed")))
-      (.onDidStart (fn [] (.emit (state-get :emitter) "proto-repl:connected")
+      (.consumeInk (:ink @state))
+      (.onDidClose (fn [] (swap! state assoc :repl nil)
+                          (-> @state :emitter (.emit "proto-repl:closed"))))
+      (.onDidStart (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
-                            ((state-get :refreshNamespaces)))
+                            ((:refreshNamespaces @state)))
                           (.activate pane)))
-      (.onDidStop (fn [] (.stopExtensionRequestProcessing (state-get :extensionsFeature))
-                         (.emit (state-get :emitter) "proto-repl:stopped"))))))
+      (.onDidStop (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
+                         (-> @state :emitter (.emit "proto-repl:stopped")))))))
 
 
 (defn- repl-args []
   (let [pane (.getActivePane js/atom.workspace)]
-    {:ink (state-get :ink)
-     :on-did-close (fn [] (state-merge! {:repl nil})
-                          (.emit (state-get :emitter) "proto-repl:closed"))
-     :on-did-start (fn [] (.emit (state-get :emitter) "proto-repl:connected")
+    {:ink (:ink @state)
+     :on-did-close (fn [] (swap! state assoc :repl nil)
+                          (-> @state :emiter (.emit "proto-repl:closed")))
+     :on-did-start (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
                             (refresh-namespaces))
                           (.activate pane))
-     :on-did-stop (fn [] (.stopExtensionRequestProcessing (state-get :extensionsFeature))
-                         (.emit (state-get :emitter) "proto-repl:stopped"))}))
+     :on-did-stop (fn [] (-> @state :extensionsFeature (.stopExtensionRequestProcessing))
+                         (-> @state :emitter (.emit "proto-repl:stopped")))}))
 
 
 (defn toggle
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
   ([project-path]
-   (when-not (state-get :repl)
-     (state-merge! {:repl (doto (Repl. (state-get :extensionsFeature))
-                            prepare-repl
-                            (.startProcessIfNotRunning project-path))}))))
+   (when-not (:repl @state)
+     (swap! state
+            #(assoc % :repl
+                    (doto (Repl. (:extensionsFeature %))
+                      prepare-repl
+                      (.startProcessIfNotRunning project-path)))))))
 
 
 (defn toggle-current-editor-dir
@@ -246,26 +247,28 @@
           toggle))
 
 
+(defn- handle-remote-nrepl-connection [params]
+  (when-not (:repl @state)
+    (let [repl (doto (Repl. (:extensionsFeature @state))
+                 prepare-repl
+                 (.startRemoteReplConnection params))]
+      (swap! state assoc :repl repl :connectionView nil))))
+
+
 (defn remote-nrepl-connection
   "Open the nRepl connection dialog."
   []
-  (state-merge!
-    {:connectionView
-     (doto (NReplConnectionView.
-             (fn [params]
-               (when-not (state-get :repl)
-                 (state-merge! {:repl (doto (Repl. (state-get :extensionsFeature))
-                                        prepare-repl
-                                        (.startRemoteReplConnection params))
-                                :connectionView nil}))))
-       .show)}))
+  (let [view (NReplConnectionView. handle-remote-nrepl-connection)]
+    (swap! state assoc :connectionView view)
+    (.show view)))
 
 
 (defn start-self-hosted-repl []
-  (when-not (state-get :repl)
-    (state-merge! {:repl (doto (Repl. (state-get :extensionsFeature))
-                            prepare-repl)}))
-  (.startSelfHostedConnection (state-get :repl)))
+  (when-not (:repl @state)
+    (let [repl (doto (Repl. (:extensionsFeature @state))
+                 prepare-repl)]
+      (swap! state assoc :repl repl)
+      (.startSelfHostedConnection repl))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -308,7 +311,8 @@
             (run)))))))
 
 
-(defn run-all-tests [] ((state-get :runAllTests))
+(defn run-all-tests []
+  ((:runAllTests @state))
   (if (self-hosted?)
     (stderr "Running tests is not supported yet in self hosted REPL.")
     (refresh-namespaces
@@ -337,10 +341,10 @@
 
 
 (defn- show-doc-result-inline [result var-name editor]
-  (when (and (state-get :ink) (js/atom.config.get "proto-repl.showInlineResults"))
+  (when (and (:ink @state) (js/atom.config.get "proto-repl.showInlineResults"))
     (let [range (doto (.getSelectedBufferRange editor)
                   (lodash.set "end.column" ##Inf))]
-      ((.makeInlineHandler (state-get :repl) editor range
+      ((.makeInlineHandler (:repl @state) editor range
                            (fn [v] #js [var-name nil [(parse-doc-result v)]]))
        result))))
 
@@ -545,4 +549,4 @@
 
 
 (defn remote-nrepl-focus-next []
-  (some-> (state-get :connectionView) .toggleFocus))
+  (some-> (:connectionViewi @state) .toggleFocus))

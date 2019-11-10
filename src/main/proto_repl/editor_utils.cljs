@@ -1,5 +1,5 @@
 (ns proto-repl.editor-utils
-  (:require [proto-repl.plugin :refer [stderr]]))
+  (:require [proto-repl.master :refer [stderr]]))
 
 (def ^:private js-editor-utils (js/require "../lib/editor-utils"))
 

@@ -2,7 +2,6 @@
 
 Spinner = require './load-widget'
 ReplTextEditor = require './views/repl-text-editor'
-InkConsole = require './views/ink-console'
 LocalReplProcess = require './process/local-repl-process'
 RemoteReplProcess = require './process/remote-repl-process'
 SelfHostedProcess = require './process/self-hosted-process'

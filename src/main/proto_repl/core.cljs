@@ -97,11 +97,6 @@
     :type "string"}
 
    :displayHelpText
-   {:description "Enables the display of help text when the REPL starts."
-    :default true
-    :type "boolean"}
-
-   :inkConsole
    {:description (str "Configure whether to use the Atom Ink console for the REPL output. If set "
                       "to false a regular text editor is used for output.")
     :default true

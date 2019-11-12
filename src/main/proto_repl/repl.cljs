@@ -1,7 +1,6 @@
 (ns proto-repl.repl)
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
-(def ^:privage ReplTextEditor (js/require "../lib/views/repl-text-editor"))
 
 (defprotocol Repl
   (clear [this])
@@ -48,27 +47,26 @@ You can disable this help text in the settings.")
   (clear [this] (-> this :old-repl .clear))
 
   (consume-ink [this ink]
-    ; (-> this :old-repl (.consumeInk ink)))
+    (when (not ink) (throw (js/Error. "The package 'ink' is required.")))
     (let [old-repl (-> this :old-repl)]
       (set! (.-ink old-repl) ink)
-      (set! (.-replView old-repl)
-            (if (and ink (js/atom.config.get "proto-repl.inkConsole"))
-              (InkConsole. ink)
-              (ReplTextEditor.)))
-      (.onDidOpen (.-replView old-repl)
-        (fn []
-          (when (js/atom.config.get "proto-repl.displayHelpText")
-            (info this repl-help-text))
-          (when (and (not ink) (js/atom.config.get "proto-repl.inkConsole"))
-            (info this (str "Atom Ink does not appear to be installed. Install it "
-                            "to get a better REPL experience.")))))
-      (.onDidClose (.-replView old-repl)
-        (fn []
-          (try
-            (some-> old-repl .-process (.stop (.-session old-repl)))
-            (set! (.-replView old-repl) nil)
-            (.emit (.-emitter old-repl) "proto-repl-repl:close")
-            (catch :default e (js/console.log "Warning error while closing:" e)))))))
+      (set!
+        (.-replView old-repl)
+        (doto (InkConsole. ink)
+          (.onDidOpen
+            (fn []
+              (when (js/atom.config.get "proto-repl.displayHelpText")
+                (info this repl-help-text))
+              (when (and (not ink) (js/atom.config.get "proto-repl.inkConsole"))
+                (info this (str "Atom Ink does not appear to be installed. Install it "
+                                "to get a better REPL experience.")))))
+          (.onDidClose
+            (fn []
+              (try
+                (some-> old-repl .-process (.stop (.-session old-repl)))
+                (set! (.-replView old-repl) nil)
+                (.emit (.-emitter old-repl) "proto-repl-repl:close")
+                (catch :default e (js/console.log "Warning error while closing:" e)))))))))
 
   (execute-code [this code options]
     (-> this :old-repl (.executeCode code (clj->js (or options {})))))

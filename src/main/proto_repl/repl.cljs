@@ -9,11 +9,13 @@
   (execute-code [this code options])
   (execute-entered-text [this])
   (exit [this])
-  ; (get-repl-type [this])
   (get-type [this])
   (inline-result-handler [this])
   (interrupt [this])
   (make-inline-handler [this editor range value->tree])
+  (on-did-close [this callback])
+  (on-did-start [this callback])
+  (on-did-stop [this callback])
   (running? [this])
   (self-hosted? [this])
 
@@ -79,6 +81,15 @@ You can disable this help text in the settings.")
 
   (make-inline-handler [this editor range value->tree]
     (-> this :old-repl (.makeInlineHandler editor range value->tree)))
+
+  (on-did-close [this callback]
+    (-> this :old-repl .-emitter (.on "proto-repl-repl:close" callback)))
+
+  (on-did-start [this callback]
+    (-> this :old-repl .-emitter (.on "proto-repl-repl:start" callback)))
+
+  (on-did-stop [this callback]
+    (-> this :old-repl .-emitter (.on "proto-repl-repl:stop" callback)))
 
   (running? [this] (-> this :old-repl .running))
   (self-hosted? [this] (-> this :old-repl .isSelfHosted))

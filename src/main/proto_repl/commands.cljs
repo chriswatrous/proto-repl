@@ -198,18 +198,21 @@
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- prepare-repl [repl repl2]
+(defn- prepare-repl [repl]
   (let [pane (.getActivePane js/atom.workspace)]
-    (r/consume-ink repl2 (:ink @state))
     (doto repl
-      (.onDidClose (fn [] (swap! state assoc :repl nil :repl2 nil)
-                          (-> @state :emitter (.emit "proto-repl:closed"))))
-      (.onDidStart (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
-                          (when (.get js/atom.config "proto-repl.refreshOnReplStart")
-                            ((:refreshNamespaces @state)))
-                          (.activate pane)))
-      (.onDidStop (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
-                         (-> @state :emitter (.emit "proto-repl:stopped")))))))
+      (r/consume-ink (:ink @state))
+      (r/on-did-start
+        (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
+               (when (.get js/atom.config "proto-repl.refreshOnReplStart")
+                 ((:refreshNamespaces @state)))
+               (.activate pane)))
+      (r/on-did-close
+        (fn [] (swap! state assoc :repl nil :repl2 nil)
+               (-> @state :emitter (.emit "proto-repl:closed"))))
+      (r/on-did-stop
+        (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
+               (-> @state :emitter (.emit "proto-repl:stopped")))))))
 
 
 (defn- repl-args []
@@ -232,7 +235,7 @@
    (when-not (:repl2 @state)
      (let [repl (Repl. (:extensionsFeature @state))
            repl2 (r/make-repl repl)]
-       (prepare-repl repl repl2)
+       (prepare-repl repl2)
        (.startProcessIfNotRunning repl project-path)
        (swap! state assoc :repl repl :repl2 repl2)))))
 
@@ -250,7 +253,7 @@
   (when-not (:repl2 @state)
     (let [repl (Repl. (:extensionsFeature @state))
           repl2 (r/make-repl repl)]
-      (prepare-repl repl repl2)
+      (prepare-repl repl2)
       (.startRemoteReplConnection repl params)
       (swap! state assoc
              :repl repl
@@ -270,7 +273,7 @@
   (when-not (:repl2 @state)
     (let [repl (Repl. (:extensionsFeature @state))
           repl2 (r/make-repl repl)]
-      (prepare-repl repl repl2)
+      (prepare-repl repl2)
       (swap! state assoc :repl repl :repl2 repl2)
       (.startSelfHostedConnection repl))))
 

@@ -1,7 +1,6 @@
 {Task, Emitter} = require 'atom'
 
 Spinner = require './load-widget'
-ReplTextEditor = require './views/repl-text-editor'
 LocalReplProcess = require './process/local-repl-process'
 RemoteReplProcess = require './process/remote-repl-process'
 SelfHostedProcess = require './process/self-hosted-process'
@@ -40,13 +39,6 @@ class Repl
   constructor: (@extensionsFeature)->
     @emitter = new Emitter
     @loadingIndicator = new Spinner()
-
-  # Calls the callback after the REPL has been started
-  onDidStart: (callback)->
-    @emitter.on 'proto-repl-repl:start', callback
-
-  onDidStop: (callback)->
-    @emitter.on 'proto-repl-repl:stop', callback
 
   # Returns true if the process is running
   running: ->
@@ -121,10 +113,6 @@ class Repl
           @replView.result(window.protoRepl.prettyEdn(msg.value))
         else
           @replView.result(msg.value)
-
-  # Invoked when the REPL window is closed.
-  onDidClose: (callback)->
-    @emitter.on 'proto-repl-repl:close', callback
 
   # Displays some result data inline. tree is a recursive structure expected to
   # be of the shape like the following.

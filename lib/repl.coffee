@@ -42,32 +42,6 @@ class Repl
     @emitter = new Emitter
     @loadingIndicator = new Spinner()
 
-  consumeInk: (ink)->
-    @ink = ink
-
-    if @ink && atom.config.get("proto-repl.inkConsole")
-      @replView = new InkConsole(@ink)
-    else
-      @replView = new ReplTextEditor()
-
-    @replView.onDidOpen =>
-      # Display the help text when the repl opens.
-      if atom.config.get("proto-repl.displayHelpText")
-        @info(replHelpText)
-      # Warn if Atom Ink is not installed.
-      if !@ink && atom.config.get("proto-repl.inkConsole")
-        @info("Atom Ink does not appear to be installed. Install it to get a better REPL experience.")
-
-
-    # The window was closed
-    @replView.onDidClose =>
-      try
-        @process?.stop(@session)
-        @replView = null
-        @emitter.emit 'proto-repl-repl:close'
-      catch error
-        console.log("Warning error while closing: " + error)
-
   # Calls the callback after the REPL has been started
   onDidStart: (callback)->
     @emitter.on 'proto-repl-repl:start', callback

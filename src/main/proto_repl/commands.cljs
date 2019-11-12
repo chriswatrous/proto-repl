@@ -10,7 +10,7 @@
                                        self-hosted?
                                        state
                                        stderr]]
-            [proto-repl.repl]))
+            [proto-repl.repl :as r]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -63,7 +63,7 @@
                        :range range}
        :displayInRepl false
        :resultHandler (fn [result options]
-                        (.inlineResultHandler (:repl @state))
+                        (-> @state :repl2 r/inline-result-handler)
                         (execute-ranges editor (rest ranges)))})))
 
 
@@ -102,16 +102,15 @@
 
 
 (defn clear-repl []
-  (some-> @state :repl .clear))
+  (some-> @state :repl2 r/clear))
 
 
 (defn interrupt []
   "Interrupt the currently executing command."
-  (-> @state :repl .interrupt))
+  (-> @state :repl2 r/interrupt))
 
 
-(defn exit-repl []
-  (-> @state :repl .exit))
+(defn exit-repl [] (-> @state :repl2 r/exit))
 
 
 (defn pretty-print
@@ -121,7 +120,7 @@
 
 
 (defn execute-text-entered-in-repl []
-  (some-> @state :repl .executeEnteredText))
+  (some-> @state :repl2 r/execute-entered-text))
 
 
 (def ^:private refresh-namespaces-code
@@ -199,11 +198,11 @@
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- prepare-repl [repl]
+(defn- prepare-repl [repl repl2]
   (let [pane (.getActivePane js/atom.workspace)]
+    (r/consume-ink repl2 (:ink @state))
     (doto repl
-      (.consumeInk (:ink @state))
-      (.onDidClose (fn [] (swap! state assoc :repl nil)
+      (.onDidClose (fn [] (swap! state assoc :repl nil :repl2 nil)
                           (-> @state :emitter (.emit "proto-repl:closed"))))
       (.onDidStart (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
@@ -216,7 +215,7 @@
 (defn- repl-args []
   (let [pane (.getActivePane js/atom.workspace)]
     {:ink (:ink @state)
-     :on-did-close (fn [] (swap! state assoc :repl nil)
+     :on-did-close (fn [] (swap! state assoc :repl nil :repl2 nil)
                           (-> @state :emiter (.emit "proto-repl:closed")))
      :on-did-start (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
@@ -230,12 +229,12 @@
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
   ([project-path]
-   (when-not (:repl @state)
-     (swap! state
-            #(assoc % :repl
-                    (doto (Repl. (:extensionsFeature %))
-                      prepare-repl
-                      (.startProcessIfNotRunning project-path)))))))
+   (when-not (:repl2 @state)
+     (let [repl (Repl. (:extensionsFeature @state))
+           repl2 (r/make-repl repl)]
+       (prepare-repl repl repl2)
+       (.startProcessIfNotRunning repl project-path)
+       (swap! state assoc :repl repl :repl2 repl2)))))
 
 
 (defn toggle-current-editor-dir
@@ -248,11 +247,15 @@
 
 
 (defn- handle-remote-nrepl-connection [params]
-  (when-not (:repl @state)
-    (let [repl (doto (Repl. (:extensionsFeature @state))
-                 prepare-repl
-                 (.startRemoteReplConnection params))]
-      (swap! state assoc :repl repl :connectionView nil))))
+  (when-not (:repl2 @state)
+    (let [repl (Repl. (:extensionsFeature @state))
+          repl2 (r/make-repl repl)]
+      (prepare-repl repl repl2)
+      (.startRemoteReplConnection repl params)
+      (swap! state assoc
+             :repl repl
+             :repl2 repl2
+             :connectionView nil))))
 
 
 (defn remote-nrepl-connection
@@ -264,10 +267,11 @@
 
 
 (defn start-self-hosted-repl []
-  (when-not (:repl @state)
-    (let [repl (doto (Repl. (:extensionsFeature @state))
-                 prepare-repl)]
-      (swap! state assoc :repl repl)
+  (when-not (:repl2 @state)
+    (let [repl (Repl. (:extensionsFeature @state))
+          repl2 (r/make-repl repl)]
+      (prepare-repl repl repl2)
+      (swap! state assoc :repl repl :repl2 repl2)
       (.startSelfHostedConnection repl))))
 
 
@@ -343,10 +347,12 @@
 (defn- show-doc-result-inline [result var-name editor]
   (when (and (:ink @state) (js/atom.config.get "proto-repl.showInlineResults"))
     (let [range (doto (.getSelectedBufferRange editor)
-                  (lodash.set "end.column" ##Inf))]
-      ((.makeInlineHandler (:repl @state) editor range
-                           (fn [v] #js [var-name nil [(parse-doc-result v)]]))
-       result))))
+                  (lodash.set "end.column" ##Inf))
+          handler (-> @state
+                      :repl2
+                      (r/make-inline-handler editor range
+                                             (fn [v] #js [var-name nil [(parse-doc-result v)]])))]
+      (handler result))))
 
 
 (defn- show-doc-result-in-console [result var-name]

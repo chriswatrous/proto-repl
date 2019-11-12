@@ -4,9 +4,9 @@
             [proto-repl.editor-utils :as eu]
             [proto-repl.master :as p :refer [state]]
             [proto-repl.utils :as u :refer [get-bind]]
+            [proto-repl.repl :as r]
             [proto-repl.integration.core]))
 
-(def ^:private lodash (js/require "lodash"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
 (def ^:private SaveRecallFeature (js/require "../lib/features/save-recall-feature"))
@@ -211,14 +211,13 @@
   (-> @state :saveRecallFeature .deactivate)
   (swap! state assoc :saveRecallFeature nil)
   (some-> @state :toolbar .removeItems)
-  (when (:repl @state)
-    ((:quitRepl @state))
-    (swap! state assoc :repl nil)))
+  (some-> @state :repl2 r/exit)
+  (swap! state assoc :repl nil :repl2 nil))
 
 
 (defn- consume-ink [ink]
   (swap! state assoc :ink ink)
-  (some-> @state :repl (.consumeInk ink))
+  (some-> @state :repl2 (r/consume-ink ink))
   (swap! state assoc :loading (ink.Loading.)))
 
 
@@ -236,8 +235,8 @@
   #js {:onDidConnect #(-> @state :emitter (.on "proto-repl:connected" %))
        :onDidClose #(-> @state :emitter (.on "proto-repl:closed" %))
        :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
-       :running #(-> @state :repl .running)
-       :getReplType #(-> @state :repl .getType)
+       :running #(-> @state :repl2 r/running?)
+       :getReplType #(-> @state :repl2 r/get-type)
        :isSelfHosted p/self-hosted?
        :registerCodeExecutionExtension p/register-code-execution-extension
        :getClojureVarUnderCursor eu/get-var-under-cursor

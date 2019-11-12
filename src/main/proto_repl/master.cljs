@@ -1,4 +1,5 @@
-(ns proto-repl.master)
+(ns proto-repl.master
+  (:require [proto-repl.repl :as r]))
 
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 
@@ -11,7 +12,7 @@
   options."
   ([code] (execute-code code {}))
   ([code options]
-   (some-> @state :repl (.executeCode (str code) (clj->js (or options {}))))))
+   (some-> @state :repl2 (r/execute-code (str code) (or options {})))))
 
 
 (defn execute-code-in-ns
@@ -21,10 +22,10 @@
      (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
-(defn info [text] (some-> @state :repl (.info text)))
-(defn stderr [text] (some-> @state :repl (.stderr text)))
-(defn stdout [text] (some-> @state :repl (.stdout text)))
-(defn doc [text] (some-> @state :repl (.doc text)))
+(defn info [text] (some-> @state :repl2 (r/info text)))
+(defn stderr [text] (some-> @state :repl2 (r/stderr text)))
+(defn stdout [text] (some-> @state :repl2 (r/stdout text)))
+(defn doc [text] (some-> @state :repl2 (r/doc text)))
 
 
 (defn register-code-execution-extension
@@ -42,42 +43,4 @@
   (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
 
 
-(defn self-hosted? [] (-> @state :repl .isSelfHosted))
-
-
-(comment
-  (do ::state)
-  {:proto-repl.repl/state (atom {:process nil
-                                 :repl-view nil
-                                 :ink nil
-                                 :extensions-feature nil})
-   :proto-repl.repl/emitter (Emitter.)}
-
-  (defprotocol ReplView
-    (doc [this text])
-    (info [this text])
-    (on-did-close [this handler])
-    (on-did-open [this handler])
-    (stderr [this text])
-    (stdout [this text]))
-
-  (defrecord InkReplView [ink])
-
-  (defrecord TextEditorReplView)
-
-  (defprotocol Repl
-    (doc [this text])
-    (info [this text])
-    (stderr [this text])
-    (stdout [this text])
-
-    (execute-code [this options])
-    (exit [this])
-    (get-repl-type [this])
-    (interrupt [this])
-    (running? [this])
-    (self-hosted? [this]))
-
-  (defrecord ProcessRepl [ink on-did-start]
-    Repl
-    (running? [this])))
+(defn self-hosted? [] (-> @state :repl2 r/self-hosted?))

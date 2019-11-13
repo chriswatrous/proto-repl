@@ -26,31 +26,14 @@ module.exports =
 # results are displayed.
 class Repl
   emitter: null
-
-  # A local or remote process
   process: null
-
   replView: null
-
   ink: null
-
   extensionsFeature: null
 
   constructor: (@extensionsFeature)->
     @emitter = new Emitter
     @loadingIndicator = new Spinner()
-
-  # Returns true if the process is running
-  running: ->
-    @process?.running()
-
-  # Returns the type of the REPL that's currently running.
-  # "SelfHosted", "Remote", Local"
-  getType: ->
-    @process?.getType()
-
-  isSelfHosted: ->
-    @getType() == "SelfHosted"
 
   handleReplStarted: ->
     @emitter.emit 'proto-repl-repl:start'
@@ -58,34 +41,8 @@ class Repl
   handleReplStopped: ->
     @emitter.emit 'proto-repl-repl:stop'
 
-  # Starts the process unless it's already running.
-  startProcessIfNotRunning: (projectPath)->
-    if @running()
-      @stderr("REPL already running")
-    else
-      @process = new LocalReplProcess(@replView)
-      @process.start projectPath,
-        messageHandler: (msg)=> @handleConnectionMessage(msg)
-        startCallback: => @handleReplStarted()
-        stopCallback: => @handleReplStopped()
-
-  # Starts nRepl connection
-  # * `options` An {Object} with following keys
-  #   * `host` The {String} host name to connect (optional). Defaults to "localhost"
-  #   * `port` The {Number} port number to connect
-  startRemoteReplConnection: ({host, port})->
-    if @running()
-      @stderr("REPL already running")
-    else
-      @process = new RemoteReplProcess(@replView)
-      @info("Starting remote REPL connection on #{host}:#{port}")
-      connOptions =
-        host: host,
-        port: port,
-        messageHandler: ((msg)=> @handleConnectionMessage(msg)),
-        startCallback: => @handleReplStarted()
-        stopCallback: => @handleReplStopped()
-      @process.start(connOptions)
+  running: ->
+    @process?.running()
 
   startSelfHostedConnection: ->
     if @running()

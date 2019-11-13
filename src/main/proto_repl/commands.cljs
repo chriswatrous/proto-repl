@@ -236,17 +236,14 @@
      (let [repl (Repl. (:extensionsFeature @state))
            repl2 (r/make-repl repl)]
        (prepare-repl repl2)
-       (.startProcessIfNotRunning repl project-path)
+       (r/start-process-if-not-running repl2 project-path)
        (swap! state assoc :repl repl :repl2 repl2)))))
 
 
 (defn toggle-current-editor-dir
   "Start the REPL in the directory of the file in the current editor."
   []
-  (some-> (get-active-text-editor)
-          .getPath
-          dirname
-          toggle))
+  (some-> (get-active-text-editor) .getPath dirname toggle))
 
 
 (defn- handle-remote-nrepl-connection [params]
@@ -254,7 +251,7 @@
     (let [repl (Repl. (:extensionsFeature @state))
           repl2 (r/make-repl repl)]
       (prepare-repl repl2)
-      (.startRemoteReplConnection repl params)
+      (r/start-remote-repl-connection repl2 (js->clj params :keywordize-keys true))
       (swap! state assoc
              :repl repl
              :repl2 repl2
@@ -558,4 +555,4 @@
 
 
 (defn remote-nrepl-focus-next []
-  (some-> (:connectionViewi @state) .toggleFocus))
+  (some-> (:connectionView @state) .toggleFocus))

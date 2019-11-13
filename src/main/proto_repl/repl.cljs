@@ -1,6 +1,8 @@
 (ns proto-repl.repl)
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
+(def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
+(def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 
 (defprotocol Repl
   (clear [this])
@@ -18,6 +20,8 @@
   (on-did-stop [this callback])
   (running? [this])
   (self-hosted? [this])
+  (start-process-if-not-running [this project-path])
+  (start-remote-repl-connection [this {:keys [host port]}])
 
   (doc [this text])
   (info [this text])
@@ -44,7 +48,7 @@ Executes the selection. Sends the selected text to the REPL.
 You can disable this help text in the settings.")
 
 
-(defrecord ^:private ReplImpl [old-repl]
+(defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
   Repl
   (clear [this] (-> this :old-repl .clear))
 
@@ -75,7 +79,7 @@ You can disable this help text in the settings.")
 
   (execute-entered-text [this] (-> this :old-repl .executeEnteredText))
   (exit [this] (-> this :old-repl .exit))
-  (get-type [this] (-> this :old-repl .getType))
+  (get-type [this] (-> this :old-repl .-process .getType))
   (inline-result-handler [this] (-> this :old-repl .inlineResultHandler))
   (interrupt [this] (-> this :old-repl .interrupt))
 
@@ -91,14 +95,45 @@ You can disable this help text in the settings.")
   (on-did-stop [this callback]
     (-> this :old-repl .-emitter (.on "proto-repl-repl:stop" callback)))
 
-  (running? [this] (-> this :old-repl .running))
-  (self-hosted? [this] (-> this :old-repl .isSelfHosted))
+  (running? [this] (some-> this :old-repl .-process .running))
+  (self-hosted? [this] (-> this get-type (= "SelfHosted")))
+
+  (start-process-if-not-running [this project-path]
+    (if (running? this)
+      (stderr this "REPL already running")
+      (let [old-repl (:old-repl this)
+            process (set! (.-process old-repl) (LocalReplProcess. (.-replView old-repl)))]
+        (set! (.-process old-repl) process)
+        (.start process project-path
+                #js {:messageHandler #(.handleConnectionMessage old-repl %)
+                     :startCallback #(.handleReplStarted old-repl)
+                     :stopCallback #(.handleReplStopped old-repl)}))))
+
+  (start-remote-repl-connection [this {:keys [host port]}]
+    (if (running? this)
+      (stderr this "REPL alrady running")
+      (let [old-repl (:old-repl this)
+            process (RemoteReplProcess. (.-replView old-repl))]
+        (set! (.-process old-repl) process)
+        (info this (str "Starting remote REPL connection on " host ":" port))
+        (.start process
+                #js {:host host
+                     :port port
+                     :messageHandler #(.handleConnectionMessage old-repl %)
+                     :startCallback #(.handleReplStarted old-repl)
+                     :stopCallback #(.handleReplStopped old-repl)}))))
 
   (doc [this text] (-> this :old-repl (.doc text)))
   (info [this text] (-> this :old-repl (.info text)))
   (stderr [this text] (-> this :old-repl (.stderr text)))
   (stdout [this text] (-> this :old-repl (.stdout text))))
 
+(def x #js{})
+(comment
+  (set! (.-a x) "qwer"))
+
 
 (defn make-repl [old-repl]
-  (->ReplImpl old-repl))
+  (map->ReplImpl {:emitter (.-emitter old-repl)
+                  :loading-indicator (.-loadingIndicator old-repl)
+                  :old-repl old-repl}))

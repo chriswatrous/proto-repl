@@ -1,10 +1,6 @@
 {Task, Emitter} = require 'atom'
 
 Spinner = require './load-widget'
-LocalReplProcess = require './process/local-repl-process'
-RemoteReplProcess = require './process/remote-repl-process'
-SelfHostedProcess = require './process/self-hosted-process'
-replHelpText = "REPL Instructions\n\nCode can be entered at the bottom and executed by pressing shift+enter.\n\nTry it now by typing (+ 1 1) in the bottom section and pressing shift+enter.\n\nWorking in another Clojure file and sending forms to the REPL is the most efficient way to work. Use the following key bindings to send code to the REPL. See the settings for more keybindings.\n\nctrl-alt-, then b\nExecute block. Finds the block of Clojure code your cursor is in and executes that.\n\nctrl-alt-, s\nExecutes the selection. Sends the selected text to the REPL.\n\nYou can disable this help text in the settings.\n"
 
 # temporary usage of copy of Atom Ink Tree view
 TreeView = require './tree-view'
@@ -43,19 +39,6 @@ class Repl
 
   running: ->
     @process?.running()
-
-  startSelfHostedConnection: ->
-    if @running()
-      @stderr("REPL already running")
-    else
-      @process = new SelfHostedProcess(@replView)
-      connOptions=
-        messageHandler: ((msg)=> @handleConnectionMessage(msg)),
-        startCallback: =>
-          @info("Self Hosted REPL Started!")
-          @handleReplStarted()
-        stopCallback: => @handleReplStopped()
-      @process.start connOptions
 
   handleConnectionMessage: (msg)->
     if msg.out

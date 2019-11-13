@@ -272,7 +272,7 @@
           repl2 (r/make-repl repl)]
       (prepare-repl repl2)
       (swap! state assoc :repl repl :repl2 repl2)
-      (.startSelfHostedConnection repl))))
+      (r/start-self-hosted-connection repl2))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -3,6 +3,7 @@
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 (def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
+(def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
 
 (defprotocol Repl
   (clear [this])
@@ -22,6 +23,7 @@
   (self-hosted? [this])
   (start-process-if-not-running [this project-path])
   (start-remote-repl-connection [this {:keys [host port]}])
+  (start-self-hosted-connection [this])
 
   (doc [this text])
   (info [this text])
@@ -121,6 +123,18 @@ You can disable this help text in the settings.")
                      :port port
                      :messageHandler #(.handleConnectionMessage old-repl %)
                      :startCallback #(.handleReplStarted old-repl)
+                     :stopCallback #(.handleReplStopped old-repl)}))))
+
+  (start-self-hosted-connection [this]
+    (if (running? this)
+      (stderr this "REPL alrady running")
+      (let [old-repl (:old-repl this)
+            process (SelfHostedProcess. (.-replView old-repl))]
+        (set! (.-process old-repl) process)
+        (.start process
+                #js {:messageHandler #(.handleConnectionMessage old-repl %)
+                     :startCallback (fn [] (info this "Self Hosted REPL Started!")
+                                           (.handleReplStarted old-repl))
                      :stopCallback #(.handleReplStopped old-repl)}))))
 
   (doc [this text] (-> this :old-repl (.doc text)))

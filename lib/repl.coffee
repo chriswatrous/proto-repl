@@ -31,28 +31,8 @@ class Repl
     @emitter = new Emitter
     @loadingIndicator = new Spinner()
 
-  handleReplStarted: ->
-    @emitter.emit 'proto-repl-repl:start'
-
-  handleReplStopped: ->
-    @emitter.emit 'proto-repl-repl:stop'
-
   running: ->
     @process?.running()
-
-  handleConnectionMessage: (msg)->
-    if msg.out
-      @stdout(msg.out)
-    else
-      # Only print values from the regular session.
-      if msg.err
-        @stderr(msg.err)
-      else if msg.value
-        @info(@process.getCurrentNs() + "=>")
-        if atom.config.get("proto-repl.autoPrettyPrint")
-          @replView.result(window.protoRepl.prettyEdn(msg.value))
-        else
-          @replView.result(msg.value)
 
   # Displays some result data inline. tree is a recursive structure expected to
   # be of the shape like the following.

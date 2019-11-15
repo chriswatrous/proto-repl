@@ -46,3 +46,11 @@
        (catch :default err
          (js/console.log err)
          #js [])))
+
+(defn obj->map [obj]
+  (loop [keys (js/Object.keys obj)
+         out (transient {})]
+    (let [f (first keys)
+          r (next keys)
+          out (assoc! out (keyword f) (aget obj f))]
+      (if r (recur r out) (persistent! out)))))

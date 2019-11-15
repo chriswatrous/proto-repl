@@ -1,4 +1,5 @@
-(ns proto-repl.repl)
+(ns proto-repl.repl
+  (:require [proto-repl.utils :refer [pretty-edn obj->map]]))
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
@@ -49,14 +50,34 @@ Executes the selection. Sends the selected text to the REPL.
 
 You can disable this help text in the settings.")
 
+;; ReplImpl "private" methods
+
+(defn- handle-repl-started [this]
+  (-> this :emitter (.emit "proto-repl-repl:start")))
+
+(defn- handle-repl-stopped [this]
+  (-> this :emitter (.emit "proto-repl-repl:stop")))
+
+(defn- handle-connection-message [this msg]
+  (let [{:keys [out err value]} (obj->map msg)]
+    (cond
+      out (stdout this out)
+      err (stderr this err)
+      value (do (info this (str (.getCurrentNs (-> this :old-repl .-process)) "=>"))
+                (-> this
+                    :old-repl
+                    .-replView
+                    (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
+                               (pretty-edn value)
+                               value)))))))
 
 (defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
   Repl
-  (clear [this] (-> this :old-repl .clear))
+  (clear [_] (.clear old-repl))
 
   (consume-ink [this ink]
     (when (not ink) (throw (js/Error. "The package 'ink' is required.")))
-    (let [old-repl (-> this :old-repl)]
+    (do
       (set! (.-ink old-repl) ink)
       (set!
         (.-replView old-repl)
@@ -76,75 +97,68 @@ You can disable this help text in the settings.")
                 (.emit (.-emitter old-repl) "proto-repl-repl:close")
                 (catch :default e (js/console.log "Warning error while closing:" e)))))))))
 
-  (execute-code [this code options]
-    (-> this :old-repl (.executeCode code (clj->js (or options {})))))
+  (execute-code [_ code options]
+    (.executeCode old-repl code (clj->js (or options {}))))
 
-  (execute-entered-text [this] (-> this :old-repl .executeEnteredText))
-  (exit [this] (-> this :old-repl .exit))
-  (get-type [this] (-> this :old-repl .-process .getType))
-  (inline-result-handler [this] (-> this :old-repl .inlineResultHandler))
-  (interrupt [this] (-> this :old-repl .interrupt))
+  (execute-entered-text [_] (.executeEnteredText old-repl))
+  (exit [_] (.exit old-repl))
+  (get-type [_] (-> old-repl .-process .getType))
+  (inline-result-handler [_] (.inlineResultHandler old-repl))
+  (interrupt [_] (.interrupt old-repl))
 
-  (make-inline-handler [this editor range value->tree]
-    (-> this :old-repl (.makeInlineHandler editor range value->tree)))
+  (make-inline-handler [_ editor range value->tree]
+    (.makeInlineHandler old-repl editor range value->tree))
 
-  (on-did-close [this callback]
-    (-> this :old-repl .-emitter (.on "proto-repl-repl:close" callback)))
+  (on-did-close [_ callback]
+    (.on emitter "proto-repl-repl:close" callback))
 
-  (on-did-start [this callback]
-    (-> this :old-repl .-emitter (.on "proto-repl-repl:start" callback)))
+  (on-did-start [_ callback]
+    (.on emitter "proto-repl-repl:start" callback))
 
-  (on-did-stop [this callback]
-    (-> this :old-repl .-emitter (.on "proto-repl-repl:stop" callback)))
+  (on-did-stop [_ callback]
+    (.on emitter "proto-repl-repl:stop" callback))
 
-  (running? [this] (some-> this :old-repl .-process .running))
+  (running? [_] (some-> old-repl .-process .running))
   (self-hosted? [this] (-> this get-type (= "SelfHosted")))
 
   (start-process-if-not-running [this project-path]
     (if (running? this)
       (stderr this "REPL already running")
-      (let [old-repl (:old-repl this)
-            process (set! (.-process old-repl) (LocalReplProcess. (.-replView old-repl)))]
+      (let [process (set! (.-process old-repl) (LocalReplProcess. (.-replView old-repl)))]
         (set! (.-process old-repl) process)
         (.start process project-path
-                #js {:messageHandler #(.handleConnectionMessage old-repl %)
-                     :startCallback #(.handleReplStarted old-repl)
-                     :stopCallback #(.handleReplStopped old-repl)}))))
+                #js {:messageHandler #(handle-connection-message this %)
+                     :startCallback #(handle-repl-started this)
+                     :stopCallback #(handle-repl-stopped this)}))))
 
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (let [old-repl (:old-repl this)
-            process (RemoteReplProcess. (.-replView old-repl))]
+      (let [process (RemoteReplProcess. (.-replView old-repl))]
         (set! (.-process old-repl) process)
         (info this (str "Starting remote REPL connection on " host ":" port))
         (.start process
                 #js {:host host
                      :port port
-                     :messageHandler #(.handleConnectionMessage old-repl %)
-                     :startCallback #(.handleReplStarted old-repl)
-                     :stopCallback #(.handleReplStopped old-repl)}))))
+                     :messageHandler #(handle-connection-message this %)
+                     :startCallback #(handle-repl-started this)
+                     :stopCallback #(handle-repl-stopped this)}))))
 
   (start-self-hosted-connection [this]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (let [old-repl (:old-repl this)
-            process (SelfHostedProcess. (.-replView old-repl))]
+      (let [process (SelfHostedProcess. (.-replView old-repl))]
         (set! (.-process old-repl) process)
         (.start process
-                #js {:messageHandler #(.handleConnectionMessage old-repl %)
+                #js {:messageHandler #(handle-connection-message this %)
                      :startCallback (fn [] (info this "Self Hosted REPL Started!")
-                                           (.handleReplStarted old-repl))
-                     :stopCallback #(.handleReplStopped old-repl)}))))
+                                           (handle-repl-started this))
+                     :stopCallback #(handle-repl-stopped this)}))))
 
-  (doc [this text] (-> this :old-repl (.doc text)))
-  (info [this text] (-> this :old-repl (.info text)))
-  (stderr [this text] (-> this :old-repl (.stderr text)))
-  (stdout [this text] (-> this :old-repl (.stdout text))))
-
-(def x #js{})
-(comment
-  (set! (.-a x) "qwer"))
+  (doc [_ text] (.doc old-repl text))
+  (info [_ text] (.info old-repl text))
+  (stderr [_ text] (.stderr old-repl text))
+  (stdout [_ text] (.stdout old-repl text)))
 
 
 (defn make-repl [old-repl]

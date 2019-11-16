@@ -89,9 +89,6 @@ class Repl
 
       handler(result)
 
-  normalResultHandler: (result, options)->
-    @inlineResultHandler(result, options)
-
   # Checks if we need to wrap the code in a do block
   needsDoBlock: (code) ->
     # currently only white lists for single symbol/keyword, such as :cljs/quit

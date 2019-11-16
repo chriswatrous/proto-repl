@@ -132,7 +132,7 @@ You can disable this help text in the settings.")
                                      (.handleReplResult (.-value result))))
                     (if resultHandler
                       (resultHandler result)
-                      (.normalResultHandler old-repl result js-options))))))))))
+                      (.inlineResultHandler old-repl result js-options))))))))))
 
   (execute-entered-text [_] (.executeEnteredText old-repl))
   (exit [_] (.exit old-repl))

@@ -1,5 +1,5 @@
 (ns proto-repl.repl
-  (:require [proto-repl.utils :refer [pretty-edn obj->map]]))
+  (:require [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]))
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
@@ -14,7 +14,7 @@
   (execute-entered-text [this])
   (exit [this])
   (get-type [this])
-  (inline-result-handler [this])
+  (inline-result-handler [this result options])
   (interrupt [this])
   (make-inline-handler [this editor range value->tree])
   (on-did-close [this callback])
@@ -74,6 +74,7 @@ You can disable this help text in the settings.")
                     (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                (pretty-edn value)
                                value)))))))
+
 (defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
   Repl
   (clear [_] (.clear old-repl))
@@ -132,12 +133,20 @@ You can disable this help text in the settings.")
                                      (.handleReplResult (.-value result))))
                     (if resultHandler
                       (resultHandler result)
-                      (.inlineResultHandler old-repl result js-options))))))))))
+                      (inline-result-handler this result options))))))))))
 
   (execute-entered-text [_] (.executeEnteredText old-repl))
   (exit [_] (.exit old-repl))
   (get-type [_] (-> old-repl .-process .getType))
-  (inline-result-handler [_] (.inlineResultHandler old-repl))
+
+  (inline-result-handler [this result {:keys [inlineOptions]}]
+    (let [old-repl (:old-repl this)]
+      (when (and (.-ink old-repl) inlineOptions
+                 (js/atom.config.get "proto-repl.showInlineResults"))
+        ((.makeInlineHandler old-repl (:editor inlineOptions) (:range inlineOptions)
+                             edn->display-tree)
+         result))))
+
   (interrupt [_] (.interrupt old-repl))
 
   (make-inline-handler [_ editor range value->tree]

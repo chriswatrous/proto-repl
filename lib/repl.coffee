@@ -80,15 +80,6 @@ class Repl
         isError = true
       @displayInline(editor, range, tree, isError)
 
-  inlineResultHandler: (result, options)->
-    # Alpha support of inline results using Atom Ink.
-    if @ink && options.inlineOptions && atom.config.get('proto-repl.showInlineResults')
-      io = options.inlineOptions
-      handler = @makeInlineHandler io.editor, io.range, (value)->
-        window.protoRepl.ednToDisplayTree(value)
-
-      handler(result)
-
   # Checks if we need to wrap the code in a do block
   needsDoBlock: (code) ->
     # currently only white lists for single symbol/keyword, such as :cljs/quit

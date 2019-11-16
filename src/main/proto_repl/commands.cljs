@@ -63,7 +63,7 @@
                        :range range}
        :displayInRepl false
        :resultHandler (fn [result options]
-                        (-> @state :repl2 r/inline-result-handler)
+                        (-> @state :repl2 (r/inline-result-handler result options))
                         (execute-ranges editor (rest ranges)))})))
 
 

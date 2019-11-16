@@ -8,7 +8,7 @@
 
 
 (defn execute-code
-  "Execute the given code string in the REPL. See Repl.executeCode for supported
+  "Execute the given code string in the REPL. See proto-repl.repl/execute-code for supported
   options."
   ([code] (execute-code code {}))
   ([code options]

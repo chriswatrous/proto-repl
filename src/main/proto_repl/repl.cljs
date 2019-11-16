@@ -10,7 +10,7 @@
   (clear [this])
   (consume-ink [this ink])
   (display-inline [this editor range tree error?])
-  (execute-code [this code options])
+  (execute-code* [this code options])
   (execute-entered-text [this])
   (exit [this])
   (get-type [this])
@@ -30,6 +30,10 @@
   (info [this text])
   (stderr [this text])
   (stdout [this text]))
+
+(defn execute-code
+  ([this code] (execute-code* this code {}))
+  ([this code options] (execute-code* this code options)))
 
 
 (def ^:private repl-help-text
@@ -70,7 +74,6 @@ You can disable this help text in the settings.")
                     (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                (pretty-edn value)
                                value)))))))
-
 (defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
   Repl
   (clear [_] (.clear old-repl))
@@ -97,8 +100,39 @@ You can disable this help text in the settings.")
                 (.emit (.-emitter old-repl) "proto-repl-repl:close")
                 (catch :default e (js/console.log "Warning error while closing:" e)))))))))
 
-  (execute-code [_ code options]
-    (.executeCode old-repl code (clj->js (or options {}))))
+  ; Executes the given code string.
+  ; Valid options:
+  ;   :resultHandler - a callback function to invoke with the value that was read. If this is
+  ;                    passed in then the value will not be displayed in the REPL.
+  ;   :displayCode - Code to display in the REPL. This can be used when the code
+  ;                  executed is wrapped in eval or other code that shouldn't be displayed to
+  ;                  the user.
+  ;   :displayInRepl - Boolean to indicate if the result value or error should be
+  ;                    displayed in the REPL. Defaults to true.
+  ;   :doBlock - Boolean to indicate if the incoming code should be wrapped in a
+  ;              do block when it contains multiple statements.
+  (execute-code* [this code {:keys [resultHandler displayCode inlineOptions doBlock]
+                             :as options}]
+    (when (running? this)
+      (let [js-options (clj->js options)]
+        (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
+          (-> old-repl .-replView (.displayExecutedCode displayCode)))
+        (let [spinid (when inlineOptions (.startAt loading-indicator
+                                                   (:editor inlineOptions)
+                                                   (:range inlineOptions)))
+              command (if (and doBlock (.needsDoBlock old-repl code))
+                        (str "(do " code ")")
+                        code)]
+          (-> old-repl .-process
+              (.sendCommand command js-options
+                (fn [result]
+                  (.stop loading-indicator (some-> inlineOptions :editor) spinid)
+                  (when-not (and (.-value result)
+                                 (-> old-repl .-extensionsFeature
+                                     (.handleReplResult (.-value result))))
+                    (if resultHandler
+                      (resultHandler result)
+                      (.normalResultHandler old-repl result js-options))))))))))
 
   (execute-entered-text [_] (.executeEnteredText old-repl))
   (exit [_] (.exit old-repl))

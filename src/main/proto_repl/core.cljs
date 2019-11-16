@@ -2,7 +2,7 @@
   (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
             [proto-repl.commands :as c]
             [proto-repl.editor-utils :as eu]
-            [proto-repl.master :as p :refer [state]]
+            [proto-repl.master :as m :refer [state]]
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.repl :as r]
             [proto-repl.integration.core]))
@@ -232,11 +232,11 @@
        :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
        :running #(-> @state :repl2 r/running?)
        :getReplType #(-> @state :repl2 r/get-type)
-       :isSelfHosted p/self-hosted?
-       :registerCodeExecutionExtension p/register-code-execution-extension
+       :isSelfHosted m/self-hosted?
+       :registerCodeExecutionExtension m/register-code-execution-extension
        :getClojureVarUnderCursor eu/get-var-under-cursor
-       :executeCode #(p/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
-       :executeCodeInNs #(p/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
+       :executeCode #(m/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
+       :executeCodeInNs #(m/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
 
        ; Utility functions
        :parseEdn (get-bind edn-reader :parse)
@@ -246,10 +246,10 @@
        :ednSavedValuesToDisplayTrees u/edn-saved-values->display-trees
 
        ; Helpers for adding text to the REPL.
-       :info p/info
-       :stderr p/stderr
-       :stdout p/stdout
-       :doc p/doc})
+       :info m/info
+       :stderr m/stderr
+       :stdout m/stdout
+       :doc m/doc})
 
 
 (let [notification (js/atom.notifications.addInfo "proto-repl loaded" #js {:dismissable true})]

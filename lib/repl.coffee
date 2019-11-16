@@ -92,57 +92,6 @@ class Repl
   normalResultHandler: (result, options)->
     @inlineResultHandler(result, options)
 
-  # Executes the given code string.
-  # Valid options:
-  # * resultHandler - a callback function to invoke with the value that was read.
-  #   If this is passed in then the value will not be displayed in the REPL.
-  # * displayCode - Code to display in the REPL. This can be used when the code
-  # executed is wrapped in eval or other code that shouldn't be displayed to the
-  # user.
-  # * displayInRepl - Boolean to indicate if the result value or error should be
-  # displayed in the REPL. Defaults to true.
-  # * doBlock - Boolean to indicate if the incoming code should be wrapped in a
-  # do block when it contains multiple statements.
-  executeCode: (code, options={})->
-    return null unless @running()
-
-    # If a handler is supplied use that otherwise use the default.
-    resultHandler = options?.resultHandler
-    handler = (result)=>
-      if resultHandler
-        resultHandler(result, options)
-      else
-        @normalResultHandler(result, options)
-
-    if options.displayCode && atom.config.get('proto-repl.displayExecutedCodeInRepl')
-      @replView.displayExecutedCode(options.displayCode)
-
-    # Display a loading indicator
-    if options.inlineOptions?
-      editor = options.inlineOptions.editor
-      range = options.inlineOptions.range
-      # use the id for asynchronous eval/result
-      spinid = @loadingIndicator.startAt(editor, range)
-
-    # Wrap multiple statements in do block if necessary
-    if options.doBlock?
-      command =
-        if @needsDoBlock code
-          "(do #{code})"
-        else
-          code
-    else
-      command = code
-
-    @process.sendCommand command, options, (result)=>
-      # Stop the loading indicator
-      @loadingIndicator.stop(options?.inlineOptions?.editor, spinid)
-      if result.value
-        unless @extensionsFeature.handleReplResult(result.value)
-          handler(result)
-      else
-        handler(result)
-
   # Checks if we need to wrap the code in a do block
   needsDoBlock: (code) ->
     # currently only white lists for single symbol/keyword, such as :cljs/quit

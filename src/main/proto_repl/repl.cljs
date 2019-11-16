@@ -75,9 +75,15 @@ You can disable this help text in the settings.")
                                (pretty-edn value)
                                value)))))))
 
+(defn- maybe-wrap-do-block [code]
+  (if (or (re-matches #"\s*[A-Za-z0-9\-!?.<>:\/*=+_]+\s*" code)
+          (re-matches #"\s*\([^\(\)]+\)\s*" code))
+    code
+    (str "(do " code ")")))
+
 (defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
   Repl
-  (clear [_] (.clear old-repl))
+  (clear [_] (-> old-repl .-replView .clear))
 
   (consume-ink [this ink]
     (when (not ink) (throw (js/Error. "The package 'ink' is required.")))
@@ -121,9 +127,7 @@ You can disable this help text in the settings.")
         (let [spinid (when inlineOptions (.startAt loading-indicator
                                                    (:editor inlineOptions)
                                                    (:range inlineOptions)))
-              command (if (and doBlock (.needsDoBlock old-repl code))
-                        (str "(do " code ")")
-                        code)]
+              command (if doBlock (maybe-wrap-do-block code) code)]
           (-> old-repl .-process
               (.sendCommand command js-options
                 (fn [result]
@@ -143,14 +147,18 @@ You can disable this help text in the settings.")
     (let [old-repl (:old-repl this)]
       (when (and (.-ink old-repl) inlineOptions
                  (js/atom.config.get "proto-repl.showInlineResults"))
-        ((.makeInlineHandler old-repl (:editor inlineOptions) (:range inlineOptions)
-                             edn->display-tree)
+        ((make-inline-handler this (:editor inlineOptions) (:range inlineOptions)
+                              edn->display-tree)
          result))))
 
   (interrupt [_] (.interrupt old-repl))
 
   (make-inline-handler [_ editor range value->tree]
-    (.makeInlineHandler old-repl editor range value->tree))
+    (fn [result]
+      (let [{:keys [value error]} (obj->map result)]
+        (.displayInline old-repl editor range
+                        (if value (value->tree value) #js [error])
+                        (not value)))))
 
   (on-did-close [_ callback]
     (.on emitter "proto-repl-repl:close" callback))
@@ -198,10 +206,10 @@ You can disable this help text in the settings.")
                                            (handle-repl-started this))
                      :stopCallback #(handle-repl-stopped this)}))))
 
-  (doc [_ text] (.doc old-repl text))
-  (info [_ text] (.info old-repl text))
-  (stderr [_ text] (.stderr old-repl text))
-  (stdout [_ text] (.stdout old-repl text)))
+  (doc [_ text] (-> old-repl .-replView (.doc text)))
+  (info [_ text] (-> old-repl .-replView (.info text)))
+  (stderr [_ text] (-> old-repl .-replView (.stderr text)))
+  (stdout [_ text] (-> old-repl .-replView (.stdout text))))
 
 
 (defn make-repl [old-repl]

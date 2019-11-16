@@ -65,21 +65,6 @@ class Repl
           type: if error then 'block' else 'inline',
           scope: 'proto-repl'
 
-  # Makes an inline displaying result handler
-  # * editor - the text editor to show the inline display in
-  # * range - the range of code to display the inline result next to
-  # * valueToTreeFn - a function that can convert the result value into the tree
-  # of content for inline display.
-  makeInlineHandler: (editor, range, valueToTreeFn)->
-    (result) =>
-      isError = false
-      if result.value
-        tree = valueToTreeFn(result.value)
-      else
-        tree = [result.error]
-        isError = true
-      @displayInline(editor, range, tree, isError)
-
   # Checks if we need to wrap the code in a do block
   needsDoBlock: (code) ->
     # currently only white lists for single symbol/keyword, such as :cljs/quit
@@ -105,20 +90,3 @@ class Repl
   interrupt: ->
     @loadingIndicator.clearAll()
     @process.interrupt()
-
-  clear: ->
-    @replView.clear()
-
-
-  # Helpers for adding text to the REPL.
-  info: (text)->
-    @replView?.info(text)
-
-  stderr: (text)->
-    @replView?.stderr(text)
-
-  stdout: (text)->
-    @replView?.stdout(text)
-
-  doc: (text)->
-    @replView?.doc(text)

@@ -5,11 +5,11 @@
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 (def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 (def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
+(def ^:private TreeView (js/require "../lib/tree-view"))
 
 (defprotocol Repl
   (clear [this])
   (consume-ink [this ink])
-  (display-inline [this editor range tree error?])
   (execute-code* [this code options])
   (execute-entered-text [this])
   (exit [this])
@@ -75,6 +75,26 @@ You can disable this help text in the settings.")
                                (pretty-edn value)
                                value)))))))
 
+(defn- build-tree-view [[head button-options & children]]
+  (let [button-options (or button-options {})
+        child-views (map #(if (vector? %)
+                            (build-tree-view %)
+                            (.leafView TreeView % #js {}))
+                         children)]
+    (if (seq child-views)
+      (.treeView TreeView head (apply array child-views) button-options)
+      (.leafView TreeView head button-options))))
+
+(defn- display-inline [this editor range tree error?]
+  (let [end (-> range .-end .-row)
+        Result (-> this :old-repl .-ink .-Result)
+        view (build-tree-view tree)]
+    (.removeLines Result editor end end)
+    (new Result editor #js[end end] #js{:content view
+                                        :error error?
+                                        :type (if error? "block" "inline")
+                                        :scope "proto-repl"})))
+
 (defn- maybe-wrap-do-block [code]
   (if (or (re-matches #"\s*[A-Za-z0-9\-!?.<>:\/*=+_]+\s*" code)
           (re-matches #"\s*\([^\(\)]+\)\s*" code))
@@ -139,8 +159,16 @@ You can disable this help text in the settings.")
                       (resultHandler result)
                       (inline-result-handler this result options))))))))))
 
-  (execute-entered-text [_] (.executeEnteredText old-repl))
-  (exit [_] (.exit old-repl))
+  (execute-entered-text [this]
+    (when (running? this)
+      (-> old-repl .-replView .executeEnteredText)))
+
+  (exit [this]
+    (when (running? this)
+      (info this "Stopping REPL")
+      (-> old-repl .-process .stop)
+      (set! (.-process old-repl) nil)))
+
   (get-type [_] (-> old-repl .-process .getType))
 
   (inline-result-handler [this result {:keys [inlineOptions]}]
@@ -148,16 +176,18 @@ You can disable this help text in the settings.")
       (when (and (.-ink old-repl) inlineOptions
                  (js/atom.config.get "proto-repl.showInlineResults"))
         ((make-inline-handler this (:editor inlineOptions) (:range inlineOptions)
-                              edn->display-tree)
+                              #(js->clj (edn->display-tree %)))
          result))))
 
-  (interrupt [_] (.interrupt old-repl))
+  (interrupt [_]
+    (.clearAll loading-indicator)
+    (-> old-repl .-process .interrupt))
 
-  (make-inline-handler [_ editor range value->tree]
+  (make-inline-handler [this editor range value->tree]
     (fn [result]
       (let [{:keys [value error]} (obj->map result)]
-        (.displayInline old-repl editor range
-                        (if value (value->tree value) #js [error])
+        (display-inline this editor range
+                        (if value (value->tree value) [error])
                         (not value)))))
 
   (on-did-close [_ callback]

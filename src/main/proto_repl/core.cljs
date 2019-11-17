@@ -207,7 +207,7 @@
   (swap! state assoc :saveRecallFeature nil)
   (some-> @state :toolbar .removeItems)
   (some-> @state :repl2 r/exit)
-  (swap! state assoc :repl nil :repl2 nil))
+  (swap! state assoc :repl2 nil))
 
 
 (defn- consume-ink [ink]

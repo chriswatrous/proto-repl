@@ -208,7 +208,7 @@
                  ((:refreshNamespaces @state)))
                (.activate pane)))
       (r/on-did-close
-        (fn [] (swap! state assoc :repl nil :repl2 nil)
+        (fn [] (swap! state assoc :repl2 nil)
                (-> @state :emitter (.emit "proto-repl:closed"))))
       (r/on-did-stop
         (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
@@ -218,7 +218,7 @@
 (defn- repl-args []
   (let [pane (.getActivePane js/atom.workspace)]
     {:ink (:ink @state)
-     :on-did-close (fn [] (swap! state assoc :repl nil :repl2 nil)
+     :on-did-close (fn [] (swap! state assoc :repl2 nil)
                           (-> @state :emiter (.emit "proto-repl:closed")))
      :on-did-start (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
@@ -233,11 +233,10 @@
   ([] (toggle nil))
   ([project-path]
    (when-not (:repl2 @state)
-     (let [repl (Repl. (:extensionsFeature @state))
-           repl2 (r/make-repl repl)]
+     (let [repl2 (r/make-repl (:extensionsFeature @state))]
        (prepare-repl repl2)
        (r/start-process-if-not-running repl2 project-path)
-       (swap! state assoc :repl repl :repl2 repl2)))))
+       (swap! state assoc :repl2 repl2)))))
 
 
 (defn toggle-current-editor-dir
@@ -248,14 +247,10 @@
 
 (defn- handle-remote-nrepl-connection [params]
   (when-not (:repl2 @state)
-    (let [repl (Repl. (:extensionsFeature @state))
-          repl2 (r/make-repl repl)]
+    (let [repl2 (r/make-repl (:extensionsFeature @state))]
       (prepare-repl repl2)
       (r/start-remote-repl-connection repl2 (js->clj params :keywordize-keys true))
-      (swap! state assoc
-             :repl repl
-             :repl2 repl2
-             :connectionView nil))))
+      (swap! state assoc :repl2 repl2 :connectionView nil))))
 
 
 (defn remote-nrepl-connection
@@ -268,10 +263,9 @@
 
 (defn start-self-hosted-repl []
   (when-not (:repl2 @state)
-    (let [repl (Repl. (:extensionsFeature @state))
-          repl2 (r/make-repl repl)]
+    (let [repl2 (r/make-repl (:extensionsFeature @state))]
       (prepare-repl repl2)
-      (swap! state assoc :repl repl :repl2 repl2)
+      (swap! state assoc :repl2 repl2)
       (r/start-self-hosted-connection repl2))))
 
 

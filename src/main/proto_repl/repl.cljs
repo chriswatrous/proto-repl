@@ -1,11 +1,13 @@
 (ns proto-repl.repl
-  (:require [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]))
+  (:require ["atom" :refer [Emitter]]
+            [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]))
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 (def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 (def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
 (def ^:private TreeView (js/require "../lib/tree-view"))
+(def ^:private Spinner (js/require "../lib/load-widget"))
 
 (defprotocol Repl
   (clear [this])
@@ -68,18 +70,13 @@ You can disable this help text in the settings.")
       out (stdout this out)
       err (stderr this err)
       value (do (info this (str (.getCurrentNs (-> this :old-repl .-process)) "=>"))
-                (-> this
-                    :old-repl
-                    .-replView
+                (-> this :old-repl .-replView
                     (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
-                               (pretty-edn value)
-                               value)))))))
+                                 (pretty-edn value) value)))))))
 
 (defn- build-tree-view [[head button-options & children]]
   (let [button-options (or button-options {})
-        child-views (map #(if (vector? %)
-                            (build-tree-view %)
-                            (.leafView TreeView % #js {}))
+        child-views (map #(if (vector? %) (build-tree-view %) (.leafView TreeView % #js {}))
                          children)]
     (if (seq child-views)
       (.treeView TreeView head (apply array child-views) button-options)
@@ -101,7 +98,7 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
-(defrecord ^:private ReplImpl [emitter loading-indicator old-repl]
+(defrecord ^:private ReplImpl [emitter loading-indicator extensions-feature old-repl]
   Repl
   (clear [_] (-> old-repl .-replView .clear))
 
@@ -124,7 +121,7 @@ You can disable this help text in the settings.")
               (try
                 (some-> old-repl .-process (.stop (.-session old-repl)))
                 (set! (.-replView old-repl) nil)
-                (.emit (.-emitter old-repl) "proto-repl-repl:close")
+                (.emit emitter "proto-repl-repl:close")
                 (catch :default e (js/console.log "Warning error while closing:" e)))))))))
 
   ; Executes the given code string.
@@ -152,9 +149,7 @@ You can disable this help text in the settings.")
               (.sendCommand command js-options
                 (fn [result]
                   (.stop loading-indicator (some-> inlineOptions :editor) spinid)
-                  (when-not (and (.-value result)
-                                 (-> old-repl .-extensionsFeature
-                                     (.handleReplResult (.-value result))))
+                  (when-not (some->> result .-value (.handleReplResult extensions-feature))
                     (if resultHandler
                       (resultHandler result)
                       (inline-result-handler this result options))))))))))
@@ -242,7 +237,8 @@ You can disable this help text in the settings.")
   (stdout [_ text] (-> old-repl .-replView (.stdout text))))
 
 
-(defn make-repl [old-repl]
-  (map->ReplImpl {:emitter (.-emitter old-repl)
-                  :loading-indicator (.-loadingIndicator old-repl)
-                  :old-repl old-repl}))
+(defn make-repl [extensions-feature]
+  (map->ReplImpl {:emitter (Emitter.)
+                  :loading-indicator (Spinner.)
+                  :extensions-feature extensions-feature
+                  :old-repl #js{}}))

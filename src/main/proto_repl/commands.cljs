@@ -15,7 +15,6 @@
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
-(def ^:private Repl (js/require "../lib/repl"))
 (def ^:private NReplConnectionView (js/require "../lib/views/nrepl-connection-view"))
 
 
@@ -107,7 +106,7 @@
 
 (defn interrupt []
   "Interrupt the currently executing command."
-  (-> @state :repl2 r/interrupt))
+  (some-> @state :repl2 r/interrupt))
 
 
 (defn exit-repl [] (-> @state :repl2 r/exit))

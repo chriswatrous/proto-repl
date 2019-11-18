@@ -206,13 +206,13 @@
   (-> @state :saveRecallFeature .deactivate)
   (swap! state assoc :saveRecallFeature nil)
   (some-> @state :toolbar .removeItems)
-  (some-> @state :repl2 r/exit)
-  (swap! state assoc :repl2 nil))
+  (some-> @state :repl r/exit)
+  (swap! state assoc :repl nil))
 
 
 (defn- consume-ink [ink]
   (swap! state assoc :ink ink)
-  (some-> @state :repl2 (r/consume-ink ink))
+  (some-> @state :repl (r/consume-ink ink))
   (swap! state assoc :loading (ink.Loading.)))
 
 
@@ -230,8 +230,8 @@
   #js {:onDidConnect #(-> @state :emitter (.on "proto-repl:connected" %))
        :onDidClose #(-> @state :emitter (.on "proto-repl:closed" %))
        :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
-       :running #(-> @state :repl2 r/running?)
-       :getReplType #(-> @state :repl2 r/get-type)
+       :running #(-> @state :repl r/running?)
+       :getReplType #(-> @state :repl r/get-type)
        :isSelfHosted m/self-hosted?
        :registerCodeExecutionExtension m/register-code-execution-extension
        :getClojureVarUnderCursor eu/get-var-under-cursor

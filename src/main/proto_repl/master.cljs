@@ -12,7 +12,7 @@
   options."
   ([code] (execute-code code {}))
   ([code options]
-   (some-> @state :repl2 (r/execute-code (str code) (or options {})))))
+   (some-> @state :repl (r/execute-code (str code) (or options {})))))
 
 
 (defn execute-code-in-ns
@@ -22,10 +22,10 @@
      (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
-(defn info [text] (some-> @state :repl2 (r/info text)))
-(defn stderr [text] (some-> @state :repl2 (r/stderr text)))
-(defn stdout [text] (some-> @state :repl2 (r/stdout text)))
-(defn doc [text] (some-> @state :repl2 (r/doc text)))
+(defn info [text] (some-> @state :repl (r/info text)))
+(defn stderr [text] (some-> @state :repl (r/stderr text)))
+(defn stdout [text] (some-> @state :repl (r/stdout text)))
+(defn doc [text] (some-> @state :repl (r/doc text)))
 
 
 (defn register-code-execution-extension
@@ -43,4 +43,4 @@
   (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
 
 
-(defn self-hosted? [] (-> @state :repl2 r/self-hosted?))
+(defn self-hosted? [] (-> @state :repl r/self-hosted?))

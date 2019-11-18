@@ -62,7 +62,7 @@
                        :range range}
        :displayInRepl false
        :resultHandler (fn [result options]
-                        (-> @state :repl2 (r/inline-result-handler result options))
+                        (-> @state :repl (r/inline-result-handler result options))
                         (execute-ranges editor (rest ranges)))})))
 
 
@@ -101,15 +101,15 @@
 
 
 (defn clear-repl []
-  (some-> @state :repl2 r/clear))
+  (some-> @state :repl r/clear))
 
 
 (defn interrupt []
   "Interrupt the currently executing command."
-  (some-> @state :repl2 r/interrupt))
+  (some-> @state :repl r/interrupt))
 
 
-(defn exit-repl [] (-> @state :repl2 r/exit))
+(defn exit-repl [] (-> @state :repl r/exit))
 
 
 (defn pretty-print
@@ -119,7 +119,7 @@
 
 
 (defn execute-text-entered-in-repl []
-  (some-> @state :repl2 r/execute-entered-text))
+  (some-> @state :repl r/execute-entered-text))
 
 
 (def ^:private refresh-namespaces-code
@@ -207,7 +207,7 @@
                  ((:refreshNamespaces @state)))
                (.activate pane)))
       (r/on-did-close
-        (fn [] (swap! state assoc :repl2 nil)
+        (fn [] (swap! state assoc :repl nil)
                (-> @state :emitter (.emit "proto-repl:closed"))))
       (r/on-did-stop
         (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
@@ -217,7 +217,7 @@
 (defn- repl-args []
   (let [pane (.getActivePane js/atom.workspace)]
     {:ink (:ink @state)
-     :on-did-close (fn [] (swap! state assoc :repl2 nil)
+     :on-did-close (fn [] (swap! state assoc :repl nil)
                           (-> @state :emiter (.emit "proto-repl:closed")))
      :on-did-start (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                           (when (.get js/atom.config "proto-repl.refreshOnReplStart")
@@ -231,11 +231,11 @@
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
   ([project-path]
-   (when-not (:repl2 @state)
-     (let [repl2 (r/make-repl (:extensionsFeature @state))]
-       (prepare-repl repl2)
-       (r/start-process-if-not-running repl2 project-path)
-       (swap! state assoc :repl2 repl2)))))
+   (when-not (:repl @state)
+     (let [repl (r/make-repl (:extensionsFeature @state))]
+       (prepare-repl repl)
+       (r/start-process-if-not-running repl project-path)
+       (swap! state assoc :repl repl)))))
 
 
 (defn toggle-current-editor-dir
@@ -245,11 +245,11 @@
 
 
 (defn- handle-remote-nrepl-connection [params]
-  (when-not (:repl2 @state)
-    (let [repl2 (r/make-repl (:extensionsFeature @state))]
-      (prepare-repl repl2)
-      (r/start-remote-repl-connection repl2 (js->clj params :keywordize-keys true))
-      (swap! state assoc :repl2 repl2 :connectionView nil))))
+  (when-not (:repl @state)
+    (let [repl (r/make-repl (:extensionsFeature @state))]
+      (prepare-repl repl)
+      (r/start-remote-repl-connection repl (js->clj params :keywordize-keys true))
+      (swap! state assoc :repl repl :connectionView nil))))
 
 
 (defn remote-nrepl-connection
@@ -261,11 +261,11 @@
 
 
 (defn start-self-hosted-repl []
-  (when-not (:repl2 @state)
-    (let [repl2 (r/make-repl (:extensionsFeature @state))]
-      (prepare-repl repl2)
-      (swap! state assoc :repl2 repl2)
-      (r/start-self-hosted-connection repl2))))
+  (when-not (:repl @state)
+    (let [repl (r/make-repl (:extensionsFeature @state))]
+      (prepare-repl repl)
+      (swap! state assoc :repl repl)
+      (r/start-self-hosted-connection repl))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -342,7 +342,7 @@
     (let [range (doto (.getSelectedBufferRange editor)
                   (lodash.set "end.column" ##Inf))
           handler (-> @state
-                      :repl2
+                      :repl
                       (r/make-inline-handler editor range
                                              (fn [v] #js [var-name nil [(parse-doc-result v)]])))]
       (handler result))))

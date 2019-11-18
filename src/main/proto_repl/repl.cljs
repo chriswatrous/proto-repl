@@ -240,4 +240,4 @@ You can disable this help text in the settings.")
                   :session (atom nil)}))
 
 (comment
-  (:repl2 @proto-repl.master/state))
+  (:repl @proto-repl.master/state))

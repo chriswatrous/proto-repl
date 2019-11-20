@@ -211,18 +211,11 @@
   (swap! state assoc :repl nil))
 
 
-(defn- consume-ink [ink]
-  (ink/consume-ink ink)
-  (swap! state assoc :ink ink)
-  (some-> @state :repl (r/consume-ink ink))
-  (swap! state assoc :loading (ink.Loading.)))
-
-
 (def exports
   (clj->js {:activate activate
             :config config
             :consumeToolbar consume-toolbar
-            :consumeInk consume-ink
+            :consumeInk ink/init
             :deactivate deactivate
             :provide provide-autocomplete}))
 

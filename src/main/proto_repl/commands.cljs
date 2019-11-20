@@ -10,7 +10,8 @@
                                        self-hosted?
                                        state
                                        stderr]]
-            [proto-repl.repl :as r]))
+            [proto-repl.repl :as r]
+            [proto-repl.ink :as ink]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -73,20 +74,16 @@
 (defn autoeval-file
   "Turn on auto evaluation of the current file."
   []
-  (let [ink (:ink @state)
-        editor (get-active-text-editor)]
+  (let [editor (get-active-text-editor)]
     (cond (not (js/atom.config.get "proto-repl.showInlineResults"))
           (stderr "Auto Evaling is not supported unless inline results is enabled")
-          (not ink)
-          (stderr "Install Atom Ink package to use auto evaling.")
           editor
           (if editor.protoReplAutoEvalDisposable
             (stderr "Already auto evaling")
             (do
               (set! editor.protoReplAutoEvalDisposable
-                    (.onDidStopChanging
-                      editor
-                      (fn [] (.removeAll ink.Result editor)
+                    (.onDidStopChanging editor
+                      (fn [] (.removeAll ink/Result editor)
                              (execute-ranges editor (get-top-level-ranges editor)))))
               (execute-ranges editor (get-top-level-ranges editor)))))))
 
@@ -200,7 +197,6 @@
 (defn- prepare-repl [repl]
   (let [pane (.getActivePane js/atom.workspace)]
     (doto repl
-      (r/consume-ink (:ink @state))
       (r/on-did-start
         (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                (when (.get js/atom.config "proto-repl.refreshOnReplStart")
@@ -212,19 +208,6 @@
       (r/on-did-stop
         (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
                (-> @state :emitter (.emit "proto-repl:stopped")))))))
-
-
-(defn- repl-args []
-  (let [pane (.getActivePane js/atom.workspace)]
-    {:ink (:ink @state)
-     :on-did-close (fn [] (swap! state assoc :repl nil)
-                          (-> @state :emiter (.emit "proto-repl:closed")))
-     :on-did-start (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
-                          (when (.get js/atom.config "proto-repl.refreshOnReplStart")
-                            (refresh-namespaces))
-                          (.activate pane))
-     :on-did-stop (fn [] (-> @state :extensionsFeature (.stopExtensionRequestProcessing))
-                         (-> @state :emitter (.emit "proto-repl:stopped")))}))
 
 
 (defn toggle
@@ -329,16 +312,12 @@
       (str/replace #"var-name" var-name)))
 
 
-(comment
-  (get-doc-code "abcd"))
-
-
 (defn- parse-doc-result [value]
   (remove-dashes (if (self-hosted?) value (edn/read-string value))))
 
 
 (defn- show-doc-result-inline [result var-name editor]
-  (when (and (:ink @state) (js/atom.config.get "proto-repl.showInlineResults"))
+  (when (js/atom.config.get "proto-repl.showInlineResults")
     (let [range (doto (.getSelectedBufferRange editor)
                   (lodash.set "end.column" ##Inf))
           handler (-> @state

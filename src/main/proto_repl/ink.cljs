@@ -1,8 +1,8 @@
 (ns proto-repl.ink)
 
-(defonce ink (atom nil))
+(declare ink)
 (declare Result)
 
-(defn consume-ink [ink-]
-  (reset! ink ink-)
+(defn init [ink-]
+  (def ink ink-)
   (def Result (.-Result ink-)))

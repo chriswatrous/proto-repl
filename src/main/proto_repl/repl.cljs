@@ -12,7 +12,6 @@
 
 (defprotocol Repl
   (clear [this])
-  (consume-ink [this ink])
   (execute-code* [this code options])
   (execute-entered-text [this])
   (exit [this])
@@ -71,7 +70,7 @@ You can disable this help text in the settings.")
       out (stdout this out)
       err (stderr this err)
       value (do (info this (str (.getCurrentNs @(:process this)) "=>"))
-                (-> @(:view this)
+                (-> this :view
                     (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                  (pretty-edn value) value)))))))
 
@@ -100,25 +99,7 @@ You can disable this help text in the settings.")
 
 (defrecord ^:private ReplImpl [emitter spinner extensions-feature ink process view session]
   Repl
-  (clear [_] (.clear @view))
-
-  (consume-ink [this ink-]
-    (when (not ink-) (throw (js/Error. "The package 'ink' is required.")))
-    (do
-      (reset! ink  ink-)
-      (reset! view
-        (doto (InkConsole. ink-)
-          (.onDidOpen
-            (fn []
-              (when (js/atom.config.get "proto-repl.displayHelpText")
-                (info this repl-help-text))))
-          (.onDidClose
-            (fn []
-              (try
-                (some-> @process (.stop @session))
-                (reset! view nil)
-                (.emit emitter "proto-repl-repl:close")
-                (catch :default e (js/console.log "Warning error while closing:" e)))))))))
+  (clear [_] (.clear view))
 
   ; Executes the given code string.
   ; Valid options:
@@ -136,7 +117,7 @@ You can disable this help text in the settings.")
     (when (running? this)
       (let [js-options (clj->js options)]
         (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
-          (.displayExecutedCode @view displayCode))
+          (.displayExecutedCode view displayCode))
         (let [spinid (when inlineOptions (.startAt spinner
                                                    (:editor inlineOptions)
                                                    (:range inlineOptions)))
@@ -151,7 +132,7 @@ You can disable this help text in the settings.")
 
   (execute-entered-text [this]
     (when (running? this)
-      (.executeEnteredText @view)))
+      (.executeEnteredText view)))
 
   (exit [this]
     (when (running? this)
@@ -162,7 +143,7 @@ You can disable this help text in the settings.")
   (get-type [_] (.getType @process))
 
   (inline-result-handler [this result {:keys [inlineOptions]}]
-    (when (and @ink inlineOptions (js/atom.config.get "proto-repl.showInlineResults"))
+    (when (and inlineOptions (js/atom.config.get "proto-repl.showInlineResults"))
       ((make-inline-handler this (:editor inlineOptions) (:range inlineOptions)
                             #(js->clj (edn->display-tree %)))
        result)))
@@ -193,7 +174,7 @@ You can disable this help text in the settings.")
   (start-process-if-not-running [this project-path]
     (if (running? this)
       (stderr this "REPL already running")
-      (do (reset! process (LocalReplProcess. @view))
+      (do (reset! process (LocalReplProcess. view))
           (.start @process project-path
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback #(handle-repl-started this)
@@ -202,7 +183,7 @@ You can disable this help text in the settings.")
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (RemoteReplProcess. @view))
+      (do (reset! process (RemoteReplProcess. view))
           (info this (str "Starting remote REPL connection on " host ":" port))
           (.start @process
                   #js {:host host
@@ -214,27 +195,38 @@ You can disable this help text in the settings.")
   (start-self-hosted-connection [this]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (SelfHostedProcess. @view))
+      (do (reset! process (SelfHostedProcess. view))
           (.start @process
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback (fn [] (info this "Self Hosted REPL Started!")
                                              (handle-repl-started this))
                        :stopCallback #(handle-repl-stopped this)}))))
 
-  (doc [_ text] (.doc @view text))
-  (info [_ text] (.info @view text))
-  (stderr [_ text] (.stderr @view text))
-  (stdout [_ text] (.stdout @view text)))
+  (doc [_ text] (.doc view text))
+  (info [_ text] (.info view text))
+  (stderr [_ text] (.stderr view text))
+  (stdout [_ text] (.stdout view text)))
 
 
 (defn make-repl [extensions-feature]
-  (map->ReplImpl {:emitter (Emitter.)
-                  :spinner (Spinner.)
-                  :extensions-feature extensions-feature
-                  :process (atom nil)
-                  :view (atom nil)
-                  :ink (atom nil)
-                  :session (atom nil)}))
-
-(comment
-  (:repl @proto-repl.master/state))
+  (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
+  (let [process (atom nil)
+        session (atom nil)
+        view (InkConsole. ink/ink)
+        emitter (Emitter.)
+        repl (map->ReplImpl {:emitter emitter
+                             :spinner (Spinner.) :extensions-feature extensions-feature
+                             :process process
+                             :view view
+                             :session session})]
+    (.onDidOpen view
+      (fn []
+        (when (js/atom.config.get "proto-repl.displayHelpText")
+          (info repl repl-help-text))))
+    (.onDidClose view
+      (fn []
+        (try
+          (some-> @process (.stop @session))
+          (.emit emitter "proto-repl-repl:close")
+          (catch :default e (js/console.log "Warning error while closing:" e)))))
+    repl))

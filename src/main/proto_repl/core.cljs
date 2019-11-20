@@ -5,7 +5,8 @@
             [proto-repl.master :as m :refer [state]]
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.repl :as r]
-            [proto-repl.integration.core]))
+            [proto-repl.integration.core]
+            [proto-repl.ink :as ink]))
 
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
@@ -211,6 +212,7 @@
 
 
 (defn- consume-ink [ink]
+  (ink/consume-ink ink)
   (swap! state assoc :ink ink)
   (some-> @state :repl (r/consume-ink ink))
   (swap! state assoc :loading (ink.Loading.)))

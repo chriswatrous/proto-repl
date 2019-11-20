@@ -1,6 +1,7 @@
 (ns proto-repl.repl
   (:require ["atom" :refer [Emitter]]
-            [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]))
+            [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]
+            [proto-repl.ink :as ink]))
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
@@ -84,13 +85,12 @@ You can disable this help text in the settings.")
 
 (defn- display-inline [this editor range tree error?]
   (let [end (-> range .-end .-row)
-        Result (.-Result @(:ink this))
         tree-view (build-tree-view tree)]
-    (.removeLines Result editor end end)
-    (new Result editor #js[end end] #js{:content tree-view
-                                        :error error?
-                                        :type (if error? "block" "inline")
-                                        :scope "proto-repl"})))
+    (.removeLines ink/Result editor end end)
+    (new ink/Result editor #js[end end] #js{:content tree-view
+                                            :error error?
+                                            :type (if error? "block" "inline")
+                                            :scope "proto-repl"})))
 
 (defn- maybe-wrap-do-block [code]
   (if (or (re-matches #"\s*[A-Za-z0-9\-!?.<>:\/*=+_]+\s*" code)
@@ -111,10 +111,7 @@ You can disable this help text in the settings.")
           (.onDidOpen
             (fn []
               (when (js/atom.config.get "proto-repl.displayHelpText")
-                (info this repl-help-text))
-              (when (and (not ink-) (js/atom.config.get "proto-repl.inkConsole"))
-                (info this (str "Atom Ink does not appear to be installed. Install it "
-                                "to get a better REPL experience.")))))
+                (info this repl-help-text))))
           (.onDidClose
             (fn []
               (try

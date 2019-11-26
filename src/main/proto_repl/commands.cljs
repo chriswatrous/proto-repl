@@ -11,12 +11,12 @@
                                        state
                                        stderr]]
             [proto-repl.repl :as r]
-            [proto-repl.ink :as ink]))
+            [proto-repl.ink :as ink]
+            [proto-repl.views.nrepl-connection-view :refer [NReplConnectionView]]))
 
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
-(def ^:private NReplConnectionView (js/require "../lib/views/nrepl-connection-view"))
 
 
 (defn- flash-highlight-range [editor range]
@@ -231,7 +231,7 @@
   (when-not (:repl @state)
     (let [repl (r/make-repl (:extensionsFeature @state))]
       (prepare-repl repl)
-      (r/start-remote-repl-connection repl (js->clj params :keywordize-keys true))
+      (r/start-remote-repl-connection repl params)
       (swap! state assoc :repl repl :connectionView nil))))
 
 

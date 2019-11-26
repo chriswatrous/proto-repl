@@ -97,7 +97,7 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature ink process view session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view session]
   Repl
   (clear [_] (.clear view))
 
@@ -115,20 +115,19 @@ You can disable this help text in the settings.")
   (execute-code* [this code {:keys [resultHandler displayCode inlineOptions doBlock]
                              :as options}]
     (when (running? this)
-      (let [js-options (clj->js options)]
-        (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
-          (.displayExecutedCode view displayCode))
-        (let [spinid (when inlineOptions (.startAt spinner
-                                                   (:editor inlineOptions)
-                                                   (:range inlineOptions)))
-              command (if doBlock (maybe-wrap-do-block code) code)]
-          (.sendCommand @process command js-options
-            (fn [result]
-              (.stop spinner (some-> inlineOptions :editor) spinid)
-              (when-not (some->> result .-value (.handleReplResult extensions-feature))
-                (if resultHandler
-                  (resultHandler result)
-                  (inline-result-handler this result options)))))))))
+      (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
+        (.displayExecutedCode view displayCode))
+      (let [spinid (when inlineOptions (.startAt spinner
+                                                 (:editor inlineOptions)
+                                                 (:range inlineOptions)))
+            command (if doBlock (maybe-wrap-do-block code) code)]
+        (.sendCommand @process command (clj->js options)
+          (fn [result]
+            (.stop spinner (:editor inlineOptions) spinid)
+            (when-not (some->> result .-value (.handleReplResult extensions-feature))
+              (if resultHandler
+                (resultHandler result)
+                (inline-result-handler this result options))))))))
 
   (execute-entered-text [this]
     (when (running? this)

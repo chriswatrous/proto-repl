@@ -89,14 +89,23 @@
                            :port (js/parseInt port)})))
      (-> this .-panel .hide))})
 
-(def NReplConnectionView
-  (let [constructor
-        (this-fn [this confirm-callback]
-          (set! (.-confirmCallback this) confirm-callback)
-          (.call View this confirm-callback))]
-    (js/Object.assign constructor View (clj->js static-methods))
-    (set! (.-prototype constructor)
-          (js/Object.assign (js/Object.create (.-prototype View))
-                            #js {:constructor constructor}
-                            (clj->js instance-methods)))
-    constructor))
+
+(def ^:private constructor
+  (this-fn [this confirm-callback]
+    (set! (.-confirmCallback this) confirm-callback)
+    (.call View this confirm-callback)))
+
+
+(js/Object.assign constructor View (clj->js static-methods))
+(set! (.-prototype constructor)
+      (js/Object.assign (js/Object.create (.-prototype View))
+                        #js {:constructor constructor}
+                        (clj->js instance-methods)))
+
+
+(defn show-connection-view [callback]
+  (doto (constructor. callback) .show))
+
+
+(defn toggle-focus [connection-view]
+  (.toggleFocus connection-view))

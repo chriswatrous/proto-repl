@@ -12,7 +12,7 @@
                                        stderr]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
-            [proto-repl.views.nrepl-connection-view :refer [NReplConnectionView]]))
+            [proto-repl.views.nrepl-connection-view :as cv]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -190,8 +190,6 @@
                        {:displayInRepl false
                         :resultHandler #(refresh-result-handler % callback)})))))
 
-
-
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- prepare-repl [repl]
@@ -209,7 +207,6 @@
         (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
                (-> @state :emitter (.emit "proto-repl:stopped")))))))
 
-
 (defn toggle
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
@@ -220,28 +217,10 @@
        (r/start-process-if-not-running repl project-path)
        (swap! state assoc :repl repl)))))
 
-
 (defn toggle-current-editor-dir
   "Start the REPL in the directory of the file in the current editor."
   []
   (some-> (get-active-text-editor) .getPath dirname toggle))
-
-
-(defn- handle-remote-nrepl-connection [params]
-  (when-not (:repl @state)
-    (let [repl (r/make-repl (:extensionsFeature @state))]
-      (prepare-repl repl)
-      (r/start-remote-repl-connection repl params)
-      (swap! state assoc :repl repl :connectionView nil))))
-
-
-(defn remote-nrepl-connection
-  "Open the nRepl connection dialog."
-  []
-  (let [view (NReplConnectionView. handle-remote-nrepl-connection)]
-    (swap! state assoc :connectionView view)
-    (.show view)))
-
 
 (defn start-self-hosted-repl []
   (when-not (:repl @state)
@@ -250,9 +229,30 @@
       (swap! state assoc :repl repl)
       (r/start-self-hosted-connection repl))))
 
+;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defonce ^:private connection-view (atom nil))
+
+
+(defn- handle-remote-nrepl-connection [params]
+  (when-not (:repl @state)
+    (let [repl (r/make-repl (:extensionsFeature @state))]
+      (prepare-repl repl)
+      (r/start-remote-repl-connection repl params)
+      (reset! connection-view nil)
+      (swap! state assoc :repl repl))))
+
+
+(defn remote-nrepl-connection
+  "Open the nRepl connection dialog."
+  []
+  (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection)))
+
+
+(defn remote-nrepl-focus-next []
+  (some-> @connection-view cv/toggle-focus))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 (defn toggle-auto-scroll []
   (let [key "proto-repl.autoScroll"]
@@ -524,7 +524,3 @@
         (execute-code-in-ns (open-file-containing-var-code var-name)
                             {:displayInRepl false
                              :resultHandler (once handle-open-file-result)})))))
-
-
-(defn remote-nrepl-focus-next []
-  (some-> (:connectionView @state) .toggleFocus))

@@ -3,13 +3,6 @@
             [clojure.string :as str]
             ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
-            [proto-repl.master :refer [doc
-                                       execute-code
-                                       execute-code-in-ns
-                                       info
-                                       self-hosted?
-                                       state
-                                       stderr]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
             [proto-repl.views.nrepl-connection-view :as cv]))
@@ -17,6 +10,47 @@
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
+
+(defonce state (atom {}))
+
+
+(defn execute-code
+  "Execute the given code string in the REPL. See proto-repl.repl/execute-code for supported
+  options."
+  ([code] (execute-code code {}))
+  ([code options]
+   (some-> @state :repl (r/execute-code (str code) (or options {})))))
+
+
+(defn execute-code-in-ns
+  ([code] (execute-code-in-ns code {}))
+  ([code options]
+   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
+     (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
+
+
+(defn info [text] (some-> @state :repl (r/info text)))
+(defn stderr [text] (some-> @state :repl (r/stderr text)))
+(defn stdout [text] (some-> @state :repl (r/stdout text)))
+(defn doc [text] (some-> @state :repl (r/doc text)))
+
+
+(defn register-code-execution-extension
+  "Registers a code execution extension with the given name and callback function.
+
+  Code execution extensions allow other Atom packages to extend Proto REPL
+  by taking output from the REPL and redirecting it for other uses like
+  visualization.
+  Code execution extensions are triggered when the result of code execution is
+  a vector with the first element is :proto-repl-code-execution-extension. The
+  second element in the vector should be the name of the extension to trigger.
+  The name will be used to locate the callback function. The third element in
+  the vector will be passed to the callback function."
+  [name callback]
+  (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
+
+
+(defn self-hosted? [] (-> @state :repl r/self-hosted?))
 
 
 (defn- flash-highlight-range [editor range]

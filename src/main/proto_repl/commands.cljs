@@ -2,7 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             ["path" :refer [dirname]]
-            [proto-repl.editor-utils :refer [get-active-text-editor get-var-under-cursor]]
+            [proto-repl.editor-utils :refer [get-active-text-editor]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
             [proto-repl.views.nrepl-connection-view :as cv]))
@@ -12,6 +12,7 @@
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 
 (defonce state (atom {}))
+(defonce repl (atom nil))
 
 
 (defn execute-code
@@ -19,7 +20,7 @@
   options."
   ([code] (execute-code code {}))
   ([code options]
-   (some-> @state :repl (r/execute-code (str code) (or options {})))))
+   (some-> @repl (r/execute-code (str code) (or options {})))))
 
 
 (defn execute-code-in-ns
@@ -29,10 +30,20 @@
      (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
-(defn info [text] (some-> @state :repl (r/info text)))
-(defn stderr [text] (some-> @state :repl (r/stderr text)))
-(defn stdout [text] (some-> @state :repl (r/stdout text)))
-(defn doc [text] (some-> @state :repl (r/doc text)))
+(defn info [text] (some-> @repl (r/info text)))
+(defn stderr [text] (some-> @repl (r/stderr text)))
+(defn stdout [text] (some-> @repl (r/stdout text)))
+(defn doc [text] (some-> @repl (r/doc text)))
+
+
+(defn get-var-under-cursor [editor]
+  (let [word (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"})]
+    (if (seq word)
+      word
+      (do
+        (proto-repl.commands/stderr
+          "This command requires you to position the cursor on a Clojure var.")
+        nil))))
 
 
 (defn register-code-execution-extension
@@ -50,7 +61,7 @@
   (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
 
 
-(defn self-hosted? [] (-> @state :repl r/self-hosted?))
+(defn self-hosted? [] (-> @repl r/self-hosted?))
 
 
 (defn- flash-highlight-range [editor range]
@@ -97,7 +108,7 @@
                        :range range}
        :displayInRepl false
        :resultHandler (fn [result options]
-                        (-> @state :repl (r/inline-result-handler result options))
+                        (-> @repl (r/inline-result-handler result options))
                         (execute-ranges editor (rest ranges)))})))
 
 
@@ -132,15 +143,15 @@
 
 
 (defn clear-repl []
-  (some-> @state :repl r/clear))
+  (some-> @repl r/clear))
 
 
 (defn interrupt []
   "Interrupt the currently executing command."
-  (some-> @state :repl r/interrupt))
+  (some-> @repl r/interrupt))
 
 
-(defn exit-repl [] (-> @state :repl r/exit))
+(defn exit-repl [] (-> @repl r/exit))
 
 
 (defn pretty-print
@@ -150,7 +161,7 @@
 
 
 (defn execute-text-entered-in-repl []
-  (some-> @state :repl r/execute-entered-text))
+  (some-> @repl r/execute-entered-text))
 
 
 (def ^:private refresh-namespaces-code
@@ -226,16 +237,16 @@
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- prepare-repl [repl]
+(defn- prepare-repl [r]
   (let [pane (.getActivePane js/atom.workspace)]
-    (doto repl
+    (doto r
       (r/on-did-start
         (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
                (when (.get js/atom.config "proto-repl.refreshOnReplStart")
                  ((:refreshNamespaces @state)))
                (.activate pane)))
       (r/on-did-close
-        (fn [] (swap! state assoc :repl nil)
+        (fn [] (reset! repl nil)
                (-> @state :emitter (.emit "proto-repl:closed"))))
       (r/on-did-stop
         (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
@@ -245,11 +256,11 @@
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
   ([project-path]
-   (when-not (:repl @state)
-     (let [repl (r/make-repl (:extensionsFeature @state))]
-       (prepare-repl repl)
-       (r/start-process-if-not-running repl project-path)
-       (swap! state assoc :repl repl)))))
+   (when-not @repl
+     (let [r (r/make-repl (:extensionsFeature @state))]
+       (prepare-repl r)
+       (r/start-process-if-not-running r project-path)
+       (reset! repl r)))))
 
 (defn toggle-current-editor-dir
   "Start the REPL in the directory of the file in the current editor."
@@ -257,11 +268,11 @@
   (some-> (get-active-text-editor) .getPath dirname toggle))
 
 (defn start-self-hosted-repl []
-  (when-not (:repl @state)
-    (let [repl (r/make-repl (:extensionsFeature @state))]
-      (prepare-repl repl)
-      (swap! state assoc :repl repl)
-      (r/start-self-hosted-connection repl))))
+  (when-not @repl
+    (let [r (r/make-repl (:extensionsFeature @state))]
+      (prepare-repl r)
+      (reset! repl r)
+      (r/start-self-hosted-connection r))))
 
 ;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -269,12 +280,13 @@
 
 
 (defn- handle-remote-nrepl-connection [params]
-  (when-not (:repl @state)
-    (let [repl (r/make-repl (:extensionsFeature @state))]
-      (prepare-repl repl)
-      (r/start-remote-repl-connection repl params)
+  (println 'handle-remote-nrepl-connection)
+  (when-not @repl
+    (let [r (r/make-repl (:extensionsFeature @state))]
+      (prepare-repl r)
+      (r/start-remote-repl-connection r params)
       (reset! connection-view nil)
-      (swap! state assoc :repl repl))))
+      (reset! repl r))))
 
 
 (defn remote-nrepl-connection
@@ -354,10 +366,8 @@
   (when (js/atom.config.get "proto-repl.showInlineResults")
     (let [range (doto (.getSelectedBufferRange editor)
                   (lodash.set "end.column" ##Inf))
-          handler (-> @state
-                      :repl
-                      (r/make-inline-handler editor range
-                                             (fn [v] #js [var-name nil [(parse-doc-result v)]])))]
+          handler (r/make-inline-handler @repl editor range
+                                         (fn [v] #js [var-name nil [(parse-doc-result v)]]))]
       (handler result))))
 
 

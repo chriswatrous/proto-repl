@@ -50,7 +50,6 @@
      :instance
      {:initialize
       (this-fn [this]
-        (js/console.log (js/Error. "nrepl-connection-view initialize"))
         (.add js/atom.commands (.-element this)
               #js{"core:confirm" #(.onConfirm this)
                   "core:cancel" #(.onCancel this)}))

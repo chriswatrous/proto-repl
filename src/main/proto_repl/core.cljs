@@ -1,7 +1,6 @@
 (ns proto-repl.core
   (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
-            [proto-repl.commands :as c :refer [state]]
-            [proto-repl.editor-utils :as eu]
+            [proto-repl.commands :as c :refer [state repl]]
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.repl :as r]
             [proto-repl.integration.core]
@@ -206,8 +205,8 @@
   (-> @state :saveRecallFeature .deactivate)
   (swap! state assoc :saveRecallFeature nil)
   (some-> @state :toolbar .removeItems)
-  (some-> @state :repl r/exit)
-  (swap! state assoc :repl nil))
+  (some-> @repl r/exit)
+  (reset! repl nil))
 
 
 (def exports
@@ -224,11 +223,11 @@
   #js {:onDidConnect #(-> @state :emitter (.on "proto-repl:connected" %))
        :onDidClose #(-> @state :emitter (.on "proto-repl:closed" %))
        :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
-       :running #(-> @state :repl r/running?)
-       :getReplType #(-> @state :repl r/get-type)
+       :running #(r/running? @repl)
+       :getReplType #(r/get-type @repl)
        :isSelfHosted c/self-hosted?
        :registerCodeExecutionExtension c/register-code-execution-extension
-       :getClojureVarUnderCursor eu/get-var-under-cursor
+       :getClojureVarUnderCursor c/get-var-under-cursor
        :executeCode #(c/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
        :executeCodeInNs #(c/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
 

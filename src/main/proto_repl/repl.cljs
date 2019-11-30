@@ -214,7 +214,8 @@ You can disable this help text in the settings.")
         view (InkConsole. ink/ink)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
-                             :spinner (Spinner.) :extensions-feature extensions-feature
+                             :spinner (Spinner.)
+                             :extensions-feature extensions-feature
                              :process process
                              :view view
                              :session session})]

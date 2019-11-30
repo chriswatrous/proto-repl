@@ -1,6 +1,7 @@
 (ns proto-repl.commands
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
+            ["atom" :refer [Emitter]]
             ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor]]
             [proto-repl.repl :as r]
@@ -10,8 +11,10 @@
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
+(def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
 
-(defonce state (atom {}))
+(defonce emitter (Emitter.))
+(defonce extensions-feature (ExtensionsFeature.))
 (defonce repl (atom nil))
 
 
@@ -58,7 +61,7 @@
   The name will be used to locate the callback function. The third element in
   the vector will be passed to the callback function."
   [name callback]
-  (-> @state :extensionsFeature (.registerCodeExecutionExtension name callback)))
+  (.registerCodeExecutionExtension extensions-feature name callback))
 
 
 (defn self-hosted? [] (-> @repl r/self-hosted?))
@@ -200,7 +203,7 @@
             ; Make sure the extension process is running after ever refresh.
             ; If refreshing or loading code had failed the extensions feature might not
             ; have stopped itself.
-            (-> @state :extensionsFeature .startExtensionRequestProcessing)
+            (.startExtensionRequestProcessing extensions-feature)
             (when callback (callback)))
         result.error
         (stderr (str "Refresh Warning: " result.error))))
@@ -239,25 +242,24 @@
 
 (defn- prepare-repl [r]
   (let [pane (.getActivePane js/atom.workspace)]
-    (doto r
-      (r/on-did-start
-        (fn [] (-> @state :emitter (.emit "proto-repl:connected"))
-               (when (.get js/atom.config "proto-repl.refreshOnReplStart")
-                 ((:refreshNamespaces @state)))
-               (.activate pane)))
-      (r/on-did-close
-        (fn [] (reset! repl nil)
-               (-> @state :emitter (.emit "proto-repl:closed"))))
-      (r/on-did-stop
-        (fn [] (-> @state :extensionsFeature .stopExtensionRequestProcessing)
-               (-> @state :emitter (.emit "proto-repl:stopped")))))))
+    (r/on-did-start r
+      (fn [] (.emit emitter "proto-repl:connected")
+             (when (.get js/atom.config "proto-repl.refreshOnReplStart")
+               (refresh-namespaces))
+             (.activate pane)))
+    (r/on-did-close r
+      (fn [] (reset! repl nil)
+             (.emit emitter "proto-repl:closed")))
+    (r/on-did-stop r
+      (fn [] (.stopExtensionRequestProcessing extensions-feature)
+             (.emit emitter "proto-repl:stopped")))))
 
 (defn toggle
   "Start the REPL if it's not currently running."
   ([] (toggle nil))
   ([project-path]
    (when-not @repl
-     (let [r (r/make-repl (:extensionsFeature @state))]
+     (let [r (r/make-repl extensions-feature)]
        (prepare-repl r)
        (r/start-process-if-not-running r project-path)
        (reset! repl r)))))
@@ -269,7 +271,7 @@
 
 (defn start-self-hosted-repl []
   (when-not @repl
-    (let [r (r/make-repl (:extensionsFeature @state))]
+    (let [r (r/make-repl extensions-feature)]
       (prepare-repl r)
       (reset! repl r)
       (r/start-self-hosted-connection r))))
@@ -280,9 +282,8 @@
 
 
 (defn- handle-remote-nrepl-connection [params]
-  (println 'handle-remote-nrepl-connection)
   (when-not @repl
-    (let [r (r/make-repl (:extensionsFeature @state))]
+    (let [r (r/make-repl extensions-feature)]
       (prepare-repl r)
       (r/start-remote-repl-connection r params)
       (reset! connection-view nil)
@@ -338,7 +339,6 @@
 
 
 (defn run-all-tests []
-  ((:runAllTests @state))
   (if (self-hosted?)
     (stderr "Running tests is not supported yet in self hosted REPL.")
     (refresh-namespaces

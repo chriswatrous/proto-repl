@@ -1,6 +1,6 @@
 (ns proto-repl.core
-  (:require ["atom" :refer [CompositeDisposable Range Point Emitter]]
-            [proto-repl.commands :as c :refer [state repl]]
+  (:require ["atom" :refer [CompositeDisposable Range Point]]
+            [proto-repl.commands :as c :refer [repl]]
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.repl :as r]
             [proto-repl.integration.core]
@@ -8,8 +8,10 @@
 
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 (def ^:private CompletionProvider (js/require "../lib/completion-provider"))
-(def ^:private SaveRecallFeature (js/require "../lib/features/save-recall-feature"))
 (def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
+
+(defonce subscriptions (CompositeDisposable.))
+(defonce toolbar (atom nil))
 
 
 (def ^:private config
@@ -152,7 +154,7 @@
                        :iconset "ion"
                        :callback "proto-repl:exit-repl"
                        :tooltip "Quit REPL"}))
-    (swap! state assoc :toolbar tb)))
+    (reset! toolbar tb)))
 
 
 (defn- provide-autocomplete []
@@ -161,12 +163,7 @@
 
 
 (defn- activate []
-  (swap! state assoc
-         :subscriptions (CompositeDisposable.)
-         :emitter (Emitter.)
-         :saveRecallFeature (SaveRecallFeature.)
-         :extensionsFeature (ExtensionsFeature.))
-  (.add (:subscriptions @state)
+  (.add subscriptions
         (.add
           js/atom.commands
           "atom-workspace"
@@ -201,10 +198,8 @@
 
 
 (defn- deactivate []
-  (-> @state :subscription .dispose)
-  (-> @state :saveRecallFeature .deactivate)
-  (swap! state assoc :saveRecallFeature nil)
-  (some-> @state :toolbar .removeItems)
+  (.dispose subscriptions)
+  (some-> @toolbar .removeItems)
   (some-> @repl r/exit)
   (reset! repl nil))
 
@@ -220,9 +215,9 @@
 
 (set!
   js/window.protoRepl
-  #js {:onDidConnect #(-> @state :emitter (.on "proto-repl:connected" %))
-       :onDidClose #(-> @state :emitter (.on "proto-repl:closed" %))
-       :onDidStop #(-> @state :emitter (.on "proto-repl:stopped" %))
+  #js {:onDidConnect #(.on c/emitter "proto-repl:connected" %)
+       :onDidClose #(.on c/emitter "proto-repl:closed" %)
+       :onDidStop #(.on c/emitter "proto-repl:stopped" %)
        :running #(r/running? @repl)
        :getReplType #(r/get-type @repl)
        :isSelfHosted c/self-hosted?

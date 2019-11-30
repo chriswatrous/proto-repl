@@ -7,7 +7,7 @@
             [promesa.core :as p]
             [promesa.async-cljs]
             ["util" :refer [inspect]]
-            [proto-repl.commands :refer [state repl]]
+            [proto-repl.commands :refer [repl]]
             [proto-repl.editor-utils :refer [get-active-text-editor]])
   (:require-macros [cljs.core.async :refer [go]]
                    [promesa.core :as p :refer [await]]

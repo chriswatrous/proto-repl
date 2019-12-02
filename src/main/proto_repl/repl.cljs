@@ -99,9 +99,9 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view view2 session]
   Repl
-  (clear [_] (.clear view))
+  (clear [_] (rv/clear view2))
 
   ; Executes the given code string.
   ; options:
@@ -203,10 +203,10 @@ You can disable this help text in the settings.")
                                              (handle-repl-started this))
                        :stopCallback #(handle-repl-stopped this)}))))
 
-  (doc [_ text] (.doc view text))
-  (info [_ text] (.info view text))
-  (stderr [_ text] (.stderr view text))
-  (stdout [_ text] (.stdout view text)))
+  (doc [_ text] (rv/doc view2 text))
+  (info [_ text] (rv/info view2 text))
+  (stderr [_ text] (rv/stderr view2 text))
+  (stdout [_ text] (rv/stdout view2 text)))
 
 
 (defn make-repl [extensions-feature]

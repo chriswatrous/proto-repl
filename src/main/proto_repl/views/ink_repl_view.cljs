@@ -11,7 +11,13 @@
 
 (defrecord InkReplView [old-view emitter]
   ReplView
-  (on-did-close [_ callback] (.on emitter "proto-repl-ink-console:close" callback)))
+  (on-did-close [_ callback] (.on emitter "proto-repl-ink-console:close" callback))
+  (clear [_] (-> old-view .-console .reset))
+  (info [_ text] (some-> old-view .-console (.info text)))
+  (stderr [_ text] (some-> old-view .-console (.stderr text)))
+  (stdout [_ text] (some-> old-view .-console (.stdout text)))
+  (doc [_ text]
+    (some-> old-view .-console (.output #js{:type "info" :icon "book" :text text}))))
 
 
 (defn- set-console-title [console title]

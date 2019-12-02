@@ -5,4 +5,5 @@
 
 (defn init [ink-]
   (def ink ink-)
-  (def Result (.-Result ink-)))
+  (def Result (.-Result ink-))
+  (def Console (.-Console ink-)))

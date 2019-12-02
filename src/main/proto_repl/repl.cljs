@@ -1,9 +1,11 @@
 (ns proto-repl.repl
   (:require ["atom" :refer [Emitter]]
             [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]
-            [proto-repl.ink :as ink]))
+            [proto-repl.ink :as ink]
+            [proto-repl.views.repl-view :as rv]
+            [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]))
 
-(def ^:private InkConsole (js/require "../lib/views/ink-console"))
+; (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 (def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 (def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
@@ -102,7 +104,7 @@ You can disable this help text in the settings.")
   (clear [_] (.clear view))
 
   ; Executes the given code string.
-  ; Valid options:
+  ; options:
   ;   :resultHandler - a callback function to invoke with the value that was read. If this is
   ;                    passed in then the value will not be displayed in the REPL.
   ;   :displayCode - Code to display in the REPL. This can be used when the code
@@ -211,19 +213,19 @@ You can disable this help text in the settings.")
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
   (let [process (atom nil)
         session (atom nil)
-        view (InkConsole. ink/ink)
+        view2 (make-ink-repl-view)
+        view (:old-view view2)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
                              :spinner (Spinner.)
                              :extensions-feature extensions-feature
                              :process process
                              :view view
+                             :view2 view2
                              :session session})]
-    (.onDidOpen view
-      (fn []
-        (when (js/atom.config.get "proto-repl.displayHelpText")
-          (info repl repl-help-text))))
-    (.onDidClose view
+    (when (js/atom.config.get "proto-repl.displayHelpText")
+      (info repl repl-help-text))
+    (rv/on-did-close view2
       (fn []
         (try
           (some-> @process (.stop @session))

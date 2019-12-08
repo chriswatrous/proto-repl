@@ -72,8 +72,8 @@ You can disable this help text in the settings.")
       out (stdout this out)
       err (stderr this err)
       value (do (info this (str (.getCurrentNs @(:process this)) "=>"))
-                (-> this :view
-                    (.result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
+                (-> this :view2
+                    (rv/result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                  (pretty-edn value) value)))))))
 
 (defn- build-tree-view [[head button-options & children]]
@@ -133,7 +133,7 @@ You can disable this help text in the settings.")
 
   (execute-entered-text [this]
     (when (running? this)
-      (.executeEnteredText view)))
+      (rv/execute-entered-text view2)))
 
   (exit [this]
     (when (running? this)
@@ -175,7 +175,7 @@ You can disable this help text in the settings.")
   (start-process-if-not-running [this project-path]
     (if (running? this)
       (stderr this "REPL already running")
-      (do (reset! process (LocalReplProcess. view))
+      (do (reset! process (LocalReplProcess. (rv/js-wrapper view2)))
           (.start @process project-path
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback #(handle-repl-started this)
@@ -184,7 +184,7 @@ You can disable this help text in the settings.")
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (RemoteReplProcess. view))
+      (do (reset! process (RemoteReplProcess. (rv/js-wrapper view2)))
           (info this (str "Starting remote REPL connection on " host ":" port))
           (.start @process
                   #js {:host host
@@ -196,7 +196,7 @@ You can disable this help text in the settings.")
   (start-self-hosted-connection [this]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (SelfHostedProcess. view))
+      (do (reset! process (SelfHostedProcess. (rv/js-wrapper view2)))
           (.start @process
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback (fn [] (info this "Self Hosted REPL Started!")

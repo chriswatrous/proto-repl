@@ -1,23 +1,56 @@
 (ns proto-repl.views.ink-repl-view
-  (:require ["atom" :refer [CompositeDisposable Emitter]]
-            [proto-repl.views.repl-view :refer [ReplView]]
+  (:require [clojure.string :as str]
+            ["atom" :refer [CompositeDisposable Emitter]]
+            [proto-repl.views.repl-view :refer [ReplView] :as rv]
             [proto-repl.ink :as ink]))
 
 (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private Highlights (js/require "../lib/highlights"))
 
 (def ^:private console-uri "atom://proto-repl/console")
+(def ^:private nbsp "\u00a0")
+(defonce ^:private highlighter (Highlights. #js{:registry js/atom.grammars}))
+
+
+(defn- highlight [text]
+  (.highlightSync highlighter #js{:fileContents text :scopeName "source.clojure"}))
+
+
+(defn- html->element [html]
+  (let [div (js/document.createElement "div")]
+    (set! (.-innerHTML div) html)
+    (.-firstChild div)))
 
 
 (defrecord InkReplView [old-view emitter]
   ReplView
   (on-did-close [_ callback] (.on emitter "proto-repl-ink-console:close" callback))
+
+  (execute-entered-text [_]
+    (let [editor (-> old-view .-console .getInput .-editor)]
+      (when-let [code (-> editor .getText str/trim)]
+        (when-not (.get js/atom.config "proto-repl.displayExecutedCodeInRepl")
+          (-> old-view (.displayExecutedCode code)))
+        (proto-repl.commands/execute-code code {:displayCode code :doBlock true}))))
+
   (clear [_] (-> old-view .-console .reset))
   (info [_ text] (some-> old-view .-console (.info text)))
   (stderr [_ text] (some-> old-view .-console (.stderr text)))
   (stdout [_ text] (some-> old-view .-console (.stdout text)))
+
   (doc [_ text]
-    (some-> old-view .-console (.output #js{:type "info" :icon "book" :text text}))))
+    (some-> old-view .-console (.output #js{:type "info" :icon "book" :text text})))
+
+  (result [_ text]
+    (let [el (-> text
+                 highlight
+                 ; Replace non-breaking spaces so that code can be correctly copied and pasted.
+                 (str/replace nbsp " ")
+                 html->element)]
+      (-> el .-classList (.add "proto-repl-console"))
+      (-> el .-style .-fontSize (set! (str (.get js/atom.config "editor.fontSize") "px")))
+      (-> el .-style .-lineHeight (set! (.get js/atom.config "editor.lineHeight")))
+      (-> old-view .-console (.result el #js{:error false})))))
 
 
 (defn- set-console-title [console title]
@@ -39,17 +72,19 @@
 
 
 (defn make-ink-repl-view []
-  (let [old-view (InkConsole.)]
-    (set! (.-ink old-view) ink/ink)
-    (set! (.-emitter old-view) (Emitter.))
-    (set! (.-subscriptions old-view) (CompositeDisposable.))
-    (-> old-view .-subscriptions
-        (.add (.addOpener js/atom.workspace
-                #(when (= % console-uri)
-                   (-> old-view .-emitter (.emit "proto-repl-ink-console:open"))
-                   (.-console old-view)))))
-    (set! (.-highlighter old-view) (Highlights. #js{:registry js/atom.grammars}))
+  (let [emitter (Emitter.)
+        old-view (InkConsole.)
+        subscriptions (CompositeDisposable.)
+        view (map->InkReplView {:old-view old-view
+                                :emitter emitter})]
+    (js/Object.assign old-view
+      #js{:ink ink/ink
+          :emitter emitter
+          :subscriptions subscriptions
+          :highlighter (Highlights. #js{:registry js/atom.grammars})})
+    (.add subscriptions (js/atom.workspace.addOpener
+                          #(when (= % console-uri)
+                             (.emit emitter "proto-repl-ink-console:open")
+                             (.-console old-view))))
     (start-console old-view)
-
-    (map->InkReplView {:old-view old-view
-                       :emitter (.-emitter old-view)})))
+    view))

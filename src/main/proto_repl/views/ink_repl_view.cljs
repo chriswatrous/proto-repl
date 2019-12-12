@@ -4,33 +4,44 @@
             [proto-repl.views.repl-view :refer [ReplView] :as rv]
             [proto-repl.ink :as ink]))
 
-(def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private Highlights (js/require "../lib/highlights"))
 
 (def ^:private console-uri "atom://proto-repl/console")
 (def ^:private nbsp "\u00a0")
 (defonce ^:private highlighter (Highlights. #js{:registry js/atom.grammars}))
 
-
 (defn- highlight [text]
   (.highlightSync highlighter #js{:fileContents text :scopeName "source.clojure"}))
-
 
 (defn- html->element [html]
   (let [div (js/document.createElement "div")]
     (set! (.-innerHTML div) html)
     (.-firstChild div)))
 
+(defn new-input [this text]
+  (doto (-> this :old-view .-console)
+    (.logInput)
+    (.done)
+    (.input)
+    (-> .getInput .-editor (.setText text))))
 
 (defrecord InkReplView [old-view emitter]
   ReplView
   (on-did-close [_ callback] (.on emitter "proto-repl-ink-console:close" callback))
 
-  (execute-entered-text [_]
-    (let [editor (-> old-view .-console .getInput .-editor)]
-      (when-let [code (-> editor .getText str/trim)]
+  (display-executed-code [this code]
+    (let [editor (-> this :old-view .-console .getInput .-editor)
+          old-text (.getText editor)]
+      (.setText editor code)
+      (new-input this old-text)))
+
+  (execute-entered-text [this]
+    (let [editor (-> old-view .-console .getInput .-editor)
+          code (-> editor .getText str/trim)]
+      (when (seq code)
+        (-> editor (.setText ""))
         (when-not (.get js/atom.config "proto-repl.displayExecutedCodeInRepl")
-          (-> old-view (.displayExecutedCode code)))
+          (rv/display-executed-code this code))
         (proto-repl.commands/execute-code code {:displayCode code :doBlock true}))))
 
   (clear [_] (-> old-view .-console .reset))
@@ -52,11 +63,9 @@
       (-> el .-style .-lineHeight (set! (.get js/atom.config "editor.lineHeight")))
       (-> old-view .-console (.result el #js{:error false})))))
 
-
 (defn- set-console-title [console title]
   (set! (.-getTitle console) (fn [] title))
   (-> console .-emitter (.emit "did-change-title" title)))
-
 
 (defn- start-console [old-view]
   (let [console (.fromId ink/Console "proto-repl")]
@@ -70,10 +79,9 @@
                  (set! (.-console old-view) nil)))
     (.open js/atom.workspace console-uri #js{:split "right" :searchAllPanes true})))
 
-
 (defn make-ink-repl-view []
   (let [emitter (Emitter.)
-        old-view (InkConsole.)
+        old-view #js{}
         subscriptions (CompositeDisposable.)
         view (map->InkReplView {:old-view old-view
                                 :emitter emitter})]

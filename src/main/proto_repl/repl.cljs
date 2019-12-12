@@ -118,7 +118,7 @@ You can disable this help text in the settings.")
                              :as options}]
     (when (running? this)
       (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
-        (.displayExecutedCode view displayCode))
+        (rv/display-executed-code view2 displayCode))
       (let [spinid (when inlineOptions (.startAt spinner
                                                  (:editor inlineOptions)
                                                  (:range inlineOptions)))

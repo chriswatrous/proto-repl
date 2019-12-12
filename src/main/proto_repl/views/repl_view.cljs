@@ -2,6 +2,7 @@
 
 (defprotocol ReplView
   (on-did-close [this callback])
+  (display-executed-code [this code])
   (execute-entered-text [this])
   (clear [this])
   (info [this text])

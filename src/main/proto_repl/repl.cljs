@@ -5,7 +5,6 @@
             [proto-repl.views.repl-view :as rv]
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]))
 
-; (def ^:private InkConsole (js/require "../lib/views/ink-console"))
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 (def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 (def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
@@ -99,7 +98,7 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view view2 session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view2 session]
   Repl
   (clear [_] (rv/clear view2))
 
@@ -214,21 +213,17 @@ You can disable this help text in the settings.")
   (let [process (atom nil)
         session (atom nil)
         view2 (make-ink-repl-view)
-        view (:old-view view2)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
                              :spinner (Spinner.)
                              :extensions-feature extensions-feature
                              :process process
-                             :view view
                              :view2 view2
                              :session session})]
     (when (js/atom.config.get "proto-repl.displayHelpText")
       (info repl repl-help-text))
     (rv/on-did-close view2
-      (fn []
-        (try
-          (some-> @process (.stop @session))
-          (.emit emitter "proto-repl-repl:close")
-          (catch :default e (js/console.log "Warning error while closing:" e)))))
+      (fn [] (try (some-> @process (.stop @session))
+                  (.emit emitter "proto-repl-repl:close")
+                  (catch :default e (js/console.error "Error while closing repl:" e)))))
     repl))

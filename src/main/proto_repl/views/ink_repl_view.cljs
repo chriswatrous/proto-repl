@@ -26,7 +26,7 @@
     (.input)
     (-> .getInput .-editor (.setText text))))
 
-(defrecord InkReplView [old-view console emitter]
+(defrecord InkReplView [console emitter subscriptions]
   ReplView
   (on-did-close [_ callback] (.on emitter "proto-repl-ink-console:close" callback))
 
@@ -95,16 +95,11 @@
 
 (defn make-ink-repl-view []
   (let [emitter (Emitter.)
-        old-view #js{}
         subscriptions (CompositeDisposable.)
         console (atom nil)
-        this (map->InkReplView {:old-view old-view
-                                :console console
-                                :emitter emitter})]
-    (js/Object.assign old-view
-      #js{:emitter emitter
-          :subscriptions subscriptions
-          :highlighter (Highlights. #js{:registry js/atom.grammars})})
+        this (map->InkReplView {:console console
+                                :emitter emitter
+                                :subscriptions subscriptions})]
     (.add subscriptions (js/atom.workspace.addOpener
                           #(when (= % console-uri)
                              (.emit emitter "proto-repl-ink-console:open")

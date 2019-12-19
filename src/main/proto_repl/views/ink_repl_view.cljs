@@ -86,10 +86,9 @@
 (defn- start-console [this]
   (let [c (make-console)]
     ; called when the user clicks the "Run" toolbar button
-    (.onEval c #(rv/execute-entered-text this))
+    (.onEval c #(proto-repl.commands/execute-text-entered-in-repl))
     (set! (.-destroy c)
-          (fn [] (js/console.log "console.destroy called" (js/Error.))
-                 (-> this :emitter (.emit "proto-repl-ink-console:close"))
+          (fn [] (-> this :emitter (.emit "proto-repl-ink-console:close"))
                  (-> this :console (reset! nil))))
     (-> this :console (reset! c)))
   (show-repl))

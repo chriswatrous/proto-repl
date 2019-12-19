@@ -76,20 +76,20 @@
     (.ensureVisible item)
     (.open js/atom.workspace console-uri #js{:split "right" :searchAllPanes true})))
 
-(defn- make-console []
+(defn- make-console [{:keys [destroy]}]
   (doto (.fromId ink/Console console-id)
     (.setTitle "Proto-REPL")
     (.activate)
-    (.setModes #js[#js{:name "proto-repl" :default true :grammar "source.clojure"}])))
+    (.setModes #js[#js{:name "proto-repl" :default true :grammar "source.clojure"}])
+    ; called when the user clicks the "Run" toolbar button
+    (.onEval #(proto-repl.commands/execute-text-entered-in-repl))
+    (aset "destroy" destroy)))
 
 (defn- start-console [this]
-  (let [c (make-console)]
-    ; called when the user clicks the "Run" toolbar button
-    (.onEval c #(proto-repl.commands/execute-text-entered-in-repl))
-    (set! (.-destroy c)
-          (fn [] (-> this :emitter (.emit "proto-repl-ink-console:close"))
-                 (-> this :console (reset! nil))))
-    (-> this :console (reset! c)))
+  (reset!
+    (:console this)
+    (make-console {:destroy (fn [] (-> this :emitter (.emit "proto-repl-ink-console:close"))
+                                   (-> this :console (reset! nil)))}))
   (show-repl))
 
 (defn make-ink-repl-view []

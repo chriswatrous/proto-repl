@@ -8,7 +8,6 @@
 
 (def ^:private console-uri "atom://proto-repl/console")
 (def ^:private console-id "proto-repl")
-(def ^:private nbsp "\u00a0")
 (defonce ^:private highlighter (Highlights. #js{:registry js/atom.grammars}))
 
 (defn- highlight [text]
@@ -55,7 +54,7 @@
     (let [el (-> text
                  highlight
                  ; Replace non-breaking spaces so that code can be correctly copied and pasted.
-                 (str/replace nbsp " ")
+                 (str/replace "&nbsp;" "&#32;")
                  html->element)]
       (-> el .-classList (.add "proto-repl-console"))
       (-> el .-style .-fontSize (set! (str (.get js/atom.config "editor.fontSize") "px")))

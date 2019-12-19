@@ -71,7 +71,7 @@ You can disable this help text in the settings.")
       out (stdout this out)
       err (stderr this err)
       value (do (info this (str (.getCurrentNs @(:process this)) "=>"))
-                (-> this :view2
+                (-> this :view
                     (rv/result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                  (pretty-edn value) value)))))))
 
@@ -98,9 +98,9 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view2 session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view session]
   Repl
-  (clear [_] (rv/clear view2))
+  (clear [_] (rv/clear view))
 
   ; Executes the given code string.
   ; options:
@@ -117,7 +117,7 @@ You can disable this help text in the settings.")
                              :as options}]
     (when (running? this)
       (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
-        (rv/display-executed-code view2 displayCode))
+        (rv/display-executed-code view displayCode))
       (let [spinid (when inlineOptions (.startAt spinner
                                                  (:editor inlineOptions)
                                                  (:range inlineOptions)))
@@ -132,7 +132,7 @@ You can disable this help text in the settings.")
 
   (execute-entered-text [this]
     (when (running? this)
-      (rv/execute-entered-text view2)))
+      (rv/execute-entered-text view)))
 
   (exit [this]
     (when (running? this)
@@ -174,7 +174,7 @@ You can disable this help text in the settings.")
   (start-process-if-not-running [this project-path]
     (if (running? this)
       (stderr this "REPL already running")
-      (do (reset! process (LocalReplProcess. (rv/js-wrapper view2)))
+      (do (reset! process (LocalReplProcess. (rv/js-wrapper view)))
           (.start @process project-path
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback #(handle-repl-started this)
@@ -183,7 +183,7 @@ You can disable this help text in the settings.")
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (RemoteReplProcess. (rv/js-wrapper view2)))
+      (do (reset! process (RemoteReplProcess. (rv/js-wrapper view)))
           (info this (str "Starting remote REPL connection on " host ":" port))
           (.start @process
                   #js {:host host
@@ -195,34 +195,34 @@ You can disable this help text in the settings.")
   (start-self-hosted-connection [this]
     (if (running? this)
       (stderr this "REPL alrady running")
-      (do (reset! process (SelfHostedProcess. (rv/js-wrapper view2)))
+      (do (reset! process (SelfHostedProcess. (rv/js-wrapper view)))
           (.start @process
                   #js {:messageHandler #(handle-connection-message this %)
                        :startCallback (fn [] (info this "Self Hosted REPL Started!")
                                              (handle-repl-started this))
                        :stopCallback #(handle-repl-stopped this)}))))
 
-  (doc [_ text] (rv/doc view2 text))
-  (info [_ text] (rv/info view2 text))
-  (stderr [_ text] (rv/stderr view2 text))
-  (stdout [_ text] (rv/stdout view2 text)))
+  (doc [_ text] (rv/doc view text))
+  (info [_ text] (rv/info view text))
+  (stderr [_ text] (rv/stderr view text))
+  (stdout [_ text] (rv/stdout view text)))
 
 
 (defn make-repl [extensions-feature]
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
   (let [process (atom nil)
         session (atom nil)
-        view2 (make-ink-repl-view)
+        view (make-ink-repl-view)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
                              :spinner (Spinner.)
                              :extensions-feature extensions-feature
                              :process process
-                             :view2 view2
+                             :view view
                              :session session})]
     (when (js/atom.config.get "proto-repl.displayHelpText")
       (info repl repl-help-text))
-    (rv/on-did-close view2
+    (rv/on-did-close view
       (fn [] (try (some-> @process (.stop @session))
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))

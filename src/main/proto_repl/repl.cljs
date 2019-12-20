@@ -98,6 +98,11 @@ You can disable this help text in the settings.")
     code
     (str "(do " code ")")))
 
+(defn- when-not-running [this func]
+  (if (running? this)
+    (stderr this "REPL alrady running")
+    (func)))
+
 (defrecord ^:private ReplImpl [emitter spinner extensions-feature process view session]
   Repl
   (clear [_] (rv/clear view))
@@ -174,35 +179,32 @@ You can disable this help text in the settings.")
   (self-hosted? [this] (-> this get-type (= "SelfHosted")))
 
   (start-process-if-not-running [this project-path]
-    (if (running? this)
-      (stderr this "REPL already running")
-      (do (reset! process (LocalReplProcess. (rv/js-wrapper view)))
-          (.start @process project-path
-                  #js {:messageHandler #(handle-connection-message this %)
-                       :startCallback #(handle-repl-started this)
-                       :stopCallback #(handle-repl-stopped this)}))))
+    (when-not-running this
+      (fn [] (reset! process (LocalReplProcess. (rv/js-wrapper view)))
+             (.start @process project-path
+                     #js {:messageHandler #(handle-connection-message this %)
+                          :startCallback #(handle-repl-started this)
+                          :stopCallback #(handle-repl-stopped this)}))))
 
   (start-remote-repl-connection [this {:keys [host port]}]
-    (if (running? this)
-      (stderr this "REPL alrady running")
-      (do (reset! process (RemoteReplProcess. (rv/js-wrapper view)))
-          (info this (str "Starting remote REPL connection on " host ":" port))
-          (.start @process
-                  #js {:host host
-                       :port port
-                       :messageHandler #(handle-connection-message this %)
-                       :startCallback #(handle-repl-started this)
-                       :stopCallback #(handle-repl-stopped this)}))))
+    (when-not-running this
+      (fn [] (reset! process (RemoteReplProcess. (rv/js-wrapper view)))
+             (info this (str "Starting remote REPL connection on " host ":" port))
+             (.start @process
+                     #js {:host host
+                          :port port
+                          :messageHandler #(handle-connection-message this %)
+                          :startCallback #(handle-repl-started this)
+                          :stopCallback #(handle-repl-stopped this)}))))
 
   (start-self-hosted-connection [this]
-    (if (running? this)
-      (stderr this "REPL alrady running")
-      (do (reset! process (SelfHostedProcess. (rv/js-wrapper view)))
-          (.start @process
-                  #js {:messageHandler #(handle-connection-message this %)
-                       :startCallback (fn [] (info this "Self Hosted REPL Started!")
-                                             (handle-repl-started this))
-                       :stopCallback #(handle-repl-stopped this)}))))
+    (when-not-running this
+      (fn [] (reset! process (SelfHostedProcess. (rv/js-wrapper view)))
+             (.start @process
+                     #js {:messageHandler #(handle-connection-message this %)
+                          :startCallback (fn [] (info this "Self Hosted REPL Started!")
+                                                (handle-repl-started this))
+                          :stopCallback #(handle-repl-stopped this)}))))
 
   (doc [_ text] (rv/doc view text))
   (info [_ text] (rv/info view text))

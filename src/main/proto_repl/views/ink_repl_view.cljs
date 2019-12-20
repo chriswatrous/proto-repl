@@ -39,10 +39,10 @@
     (let [editor (-> @console .getInput .-editor)
           code (-> editor .getText str/trim)]
       (when (seq code)
-        (-> editor (.setText ""))
-        (when-not (.get js/atom.config "proto-repl.displayExecutedCodeInRepl")
-          (rv/display-executed-code this code))
-        (proto-repl.commands/execute-code code {:displayCode code :doBlock true}))))
+        (.setText editor "")
+        (proto-repl.commands/execute-code code {:displayCode code
+                                                :doBlock true
+                                                :alwaysDisplay true}))))
 
   (clear [_] (-> @console .reset))
   (info [_ text] (some-> @console (.info text)))

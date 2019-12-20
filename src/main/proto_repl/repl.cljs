@@ -113,10 +113,12 @@ You can disable this help text in the settings.")
   ;                    displayed in the REPL. Defaults to true.
   ;   :doBlock - Boolean to indicate if the incoming code should be wrapped in a
   ;              do block when it contains multiple statements.
-  (execute-code* [this code {:keys [resultHandler displayCode inlineOptions doBlock]
+  (execute-code* [this code {:keys [resultHandler displayCode inlineOptions doBlock
+                                    alwaysDisplay]
                              :as options}]
     (when (running? this)
-      (when (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl"))
+      (when (or alwaysDisplay
+                (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl")))
         (rv/display-executed-code view displayCode))
       (let [spinid (when inlineOptions (.startAt spinner
                                                  (:editor inlineOptions)

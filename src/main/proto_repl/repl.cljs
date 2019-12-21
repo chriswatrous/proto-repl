@@ -104,7 +104,7 @@ You can disable this help text in the settings.")
     (stderr this "REPL alrady running")
     (func)))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature connection view session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature connection view]
   Repl
   (clear [_] (rv/clear view))
 
@@ -217,19 +217,17 @@ You can disable this help text in the settings.")
 (defn make-repl [extensions-feature]
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
   (let [connection (atom nil)
-        session (atom nil)
         view (make-ink-repl-view)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
                              :spinner (Spinner.)
                              :extensions-feature extensions-feature
                              :connection connection
-                             :view view
-                             :session session})]
+                             :view view})]
     (when (js/atom.config.get "proto-repl.displayHelpText")
       (info repl repl-help-text))
     (rv/on-did-close view
-      (fn [] (try (some-> @connection (rc/stop @session))
+      (fn [] (try (some-> @connection rc/stop)
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))
     repl))

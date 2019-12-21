@@ -2,29 +2,28 @@
   (:require [proto-repl.repl-connection :refer [ReplConnection]]
             [proto-repl.views.repl-view :as rv]))
 
-(def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
 (def ^:private NReplConnection (js/require "../lib/process/nrepl-connection"))
 
-(defrecord RemoteReplConnection [old conn view]
+(defrecord RemoteReplConnection [conn on-stop view]
   ReplConnection
   (get-type [_] "Remote")
-  (get-current-ns [_] (.getCurrentNs old))
-  (interrupt [_] (.interrupt old))
-  (running? [_] (.running old))
-  (send-command [_ command options callback] (.sendCommand old command (clj->js options) callback))
-  (stop* [this session] (.stop old session)))
+  (get-current-ns [_] (.getCurrentNs conn))
+  (interrupt [_]
+    (.interrupt conn)
+    (rv/info view "Interrupting"))
+  (running? [_] (.connected conn))
+  (send-command [_ command options callback]
+    (.sendCommand conn command (clj->js options) callback))
+  (stop [_]
+    (when on-stop (on-stop))
+    (.close conn)))
 
 (defn connect-to-remote-repl [{:keys [view host port on-message on-start on-stop]}]
-  (let [conn (NReplConnection.)
-        old (RemoteReplProcess.)]
-    (js/Object.assign old #js{:replView (rv/js-wrapper view)
-                              :conn conn
-                              :stopCallback on-stop})
-    (.start conn #js{:host host
-                     :port port
-                     :messageHandler on-message
-                     :startCallback on-start})
-    (map->RemoteReplConnection {:old old
-                                :view view
-                                :conn conn
-                                :on-stop on-stop})))
+  (map->RemoteReplConnection
+    {:view view
+     :on-stop on-stop
+     :conn (doto (NReplConnection.)
+             (.start #js{:host host
+                         :port port
+                         :messageHandler on-message
+                         :startCallback on-start}))}))

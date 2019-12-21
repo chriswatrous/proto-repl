@@ -6,8 +6,4 @@
   (interrupt [this])
   (running? [this])
   (send-command [this command options callback])
-  (stop* [this session]))
-
-(defn stop
-  ([this] (stop* this nil))
-  ([this session] (stop* this session)))
+  (stop [this]))

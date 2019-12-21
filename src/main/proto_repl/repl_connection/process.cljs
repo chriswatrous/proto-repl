@@ -11,7 +11,7 @@
   (interrupt [_] (.interrupt old))
   (running? [_] (.running old))
   (send-command [_ command options callback] (.sendCommand old command (clj->js options) callback))
-  (stop* [this session] (.stop old session)))
+  (stop [_] (.stop old)))
 
 (defn start-repl-process [{:keys [view project-path on-message on-start on-stop]}]
   (let [old (LocalReplProcess. (rv/js-wrapper view))]

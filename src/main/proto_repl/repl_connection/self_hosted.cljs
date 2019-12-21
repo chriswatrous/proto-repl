@@ -11,7 +11,7 @@
   (interrupt [_] (.interrupt old))
   (running? [_] (.running old))
   (send-command [_ command options callback] (.sendCommand old command (clj->js options) callback))
-  (stop* [this session] (.stop old session)))
+  (stop [_] (.stop old)))
 
 (defn start-self-hosted-repl [{:keys [view on-message on-start on-stop]}]
   (let [old (SelfHostedProcess. (rv/js-wrapper view))]

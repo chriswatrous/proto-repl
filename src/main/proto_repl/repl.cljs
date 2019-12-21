@@ -3,11 +3,12 @@
             [proto-repl.utils :refer [pretty-edn obj->map edn->display-tree]]
             [proto-repl.ink :as ink]
             [proto-repl.views.repl-view :as rv]
-            [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]))
+            [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
+            [proto-repl.repl-connection :as rc]
+            [proto-repl.repl-connection.remote :refer [connect-to-remote-repl]]
+            [proto-repl.repl-connection.process :refer [start-repl-process]]
+            [proto-repl.repl-connection.self-hosted :refer [start-self-hosted-repl]]))
 
-(def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
-(def ^:private RemoteReplProcess (js/require "../lib/process/remote-repl-process"))
-(def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
 (def ^:private TreeView (js/require "../lib/tree-view"))
 (def ^:private Spinner (js/require "../lib/load-widget"))
 
@@ -70,7 +71,7 @@ You can disable this help text in the settings.")
     (cond
       out (stdout this out)
       err (stderr this err)
-      value (do (info this (str (.getCurrentNs @(:process this)) "=>"))
+      value (do (info this (str (rc/get-current-ns @(:connection this)) "=>"))
                 (-> this :view
                     (rv/result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
                                  (pretty-edn value) value)))))))
@@ -103,7 +104,7 @@ You can disable this help text in the settings.")
     (stderr this "REPL alrady running")
     (func)))
 
-(defrecord ^:private ReplImpl [emitter spinner extensions-feature process view session]
+(defrecord ^:private ReplImpl [emitter spinner extensions-feature connection view session]
   Repl
   (clear [_] (rv/clear view))
 
@@ -129,7 +130,7 @@ You can disable this help text in the settings.")
                                                  (:editor inlineOptions)
                                                  (:range inlineOptions)))
             command (if doBlock (maybe-wrap-do-block code) code)]
-        (.sendCommand @process command (clj->js options)
+        (rc/send-command @connection command options
           (fn [result]
             (.stop spinner (:editor inlineOptions) spinid)
             (when-not (some->> result .-value (.handleReplResult extensions-feature))
@@ -144,10 +145,10 @@ You can disable this help text in the settings.")
   (exit [this]
     (when (running? this)
       (info this "Stopping REPL")
-      (.stop @process)
-      (reset! process nil)))
+      (rc/stop @connection)
+      (reset! connection nil)))
 
-  (get-type [_] (.getType @process))
+  (get-type [_] (rc/get-type @connection))
 
   (inline-result-handler [this result {:keys [inlineOptions]}]
     (when (and inlineOptions (js/atom.config.get "proto-repl.showInlineResults"))
@@ -157,7 +158,7 @@ You can disable this help text in the settings.")
 
   (interrupt [_]
     (.clearAll spinner)
-    (.interrupt @process))
+    (rc/interrupt @connection))
 
   (make-inline-handler [this editor range value->tree]
     (fn [result]
@@ -175,36 +176,37 @@ You can disable this help text in the settings.")
   (on-did-stop [_ callback]
     (.on emitter "proto-repl-repl:stop" callback))
 
-  (running? [_] (some-> @process .running))
+  (running? [_] (some-> @connection rc/running?))
   (self-hosted? [this] (-> this get-type (= "SelfHosted")))
 
   (start-process-if-not-running [this project-path]
     (when-not-running this
-      (fn [] (reset! process (LocalReplProcess. (rv/js-wrapper view)))
-             (.start @process project-path
-                     #js {:messageHandler #(handle-connection-message this %)
-                          :startCallback #(handle-repl-started this)
-                          :stopCallback #(handle-repl-stopped this)}))))
+      (fn [] (reset! connection (start-repl-process
+                                  {:view view
+                                   :project-path project-path
+                                   :on-message #(handle-connection-message this %)
+                                   :on-start #(handle-repl-started this)
+                                   :on-stop #(handle-repl-stopped this)})))))
 
   (start-remote-repl-connection [this {:keys [host port]}]
     (when-not-running this
-      (fn [] (reset! process (RemoteReplProcess. (rv/js-wrapper view)))
-             (info this (str "Starting remote REPL connection on " host ":" port))
-             (.start @process
-                     #js {:host host
-                          :port port
-                          :messageHandler #(handle-connection-message this %)
-                          :startCallback #(handle-repl-started this)
-                          :stopCallback #(handle-repl-stopped this)}))))
+      (fn [] (info this (str "Starting remote REPL connection on " host ":" port))
+             (reset! connection (connect-to-remote-repl
+                                  {:host host
+                                   :port port
+                                   :view view
+                                   :on-message #(handle-connection-message this %)
+                                   :on-start #(handle-repl-started this)
+                                   :on-stop #(handle-repl-stopped this)})))))
 
   (start-self-hosted-connection [this]
     (when-not-running this
-      (fn [] (reset! process (SelfHostedProcess. (rv/js-wrapper view)))
-             (.start @process
-                     #js {:messageHandler #(handle-connection-message this %)
-                          :startCallback (fn [] (info this "Self Hosted REPL Started!")
-                                                (handle-repl-started this))
-                          :stopCallback #(handle-repl-stopped this)}))))
+      (fn [] (reset! connection (start-self-hosted-repl
+                                  {:view view
+                                   :on-message #(handle-connection-message this %)
+                                   :on-start (fn [] (info this "Self Hosted REPL Started!")
+                                                    (handle-repl-started this))
+                                   :on-stop #(handle-repl-stopped this)})))))
 
   (doc [_ text] (rv/doc view text))
   (info [_ text] (rv/info view text))
@@ -214,20 +216,20 @@ You can disable this help text in the settings.")
 
 (defn make-repl [extensions-feature]
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
-  (let [process (atom nil)
+  (let [connection (atom nil)
         session (atom nil)
         view (make-ink-repl-view)
         emitter (Emitter.)
         repl (map->ReplImpl {:emitter emitter
                              :spinner (Spinner.)
                              :extensions-feature extensions-feature
-                             :process process
+                             :connection connection
                              :view view
                              :session session})]
     (when (js/atom.config.get "proto-repl.displayHelpText")
       (info repl repl-help-text))
     (rv/on-did-close view
-      (fn [] (try (some-> @process (.stop @session))
+      (fn [] (try (some-> @connection (rc/stop @session))
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))
     repl))

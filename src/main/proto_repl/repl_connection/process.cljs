@@ -8,12 +8,18 @@
 (defrecord ProcessReplConnection [old conn view]
   ReplConnection
   (get-type [_] "Process")
-  (get-current-ns [_] (.getCurrentNs old))
+
+  (get-current-ns [_] (.getCurrentNs conn))
+
   (interrupt [_]
     (.interrupt conn)
     (rv/info view "Interrupting"))
-  (running? [_] (.running old))
-  (send-command [_ command options callback] (.sendCommand old command (clj->js options) callback))
+
+  (running? [_] (.connected conn))
+
+  (send-command [_ command options callback]
+    (.sendCommand conn command (clj->js options) callback))
+
   (stop [_]
     (doto old
       (-> .-conn .close)

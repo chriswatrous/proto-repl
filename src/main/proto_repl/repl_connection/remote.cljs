@@ -7,13 +7,18 @@
 (defrecord RemoteReplConnection [conn on-stop view]
   ReplConnection
   (get-type [_] "Remote")
+
   (get-current-ns [_] (.getCurrentNs conn))
+
   (interrupt [_]
     (.interrupt conn)
     (rv/info view "Interrupting"))
+
   (running? [_] (.connected conn))
+
   (send-command [_ command options callback]
     (.sendCommand conn command (clj->js options) callback))
+
   (stop [_]
     (when on-stop (on-stop))
     (.close conn)))

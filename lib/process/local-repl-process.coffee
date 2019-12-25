@@ -134,9 +134,3 @@ class LocalReplProcess
 
   running: ()->
     @process != null && @conn.connected()
-
-  sendCommand: (code, options, resultHandler)->
-    @conn.sendCommand(code, options, resultHandler)
-
-  getCurrentNs: ->
-    @conn.getCurrentNs()

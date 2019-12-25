@@ -13,22 +13,6 @@ EXIT_CMD="(System/exit 0)"
 module.exports=
 # Represents a locally running REPL process.
 class LocalReplProcess
-
-  # A set of functions for writing text to the REPL.
-  replView: null
-
-  # The nREPL connection
-  conn: new NReplConnection()
-
-  # reference to a running process
-  process: null
-
-  constructor: (@replView)->
-    null
-
-  getType: ->
-    "Local"
-
   # Searches upwords to find the root dTproject if proto repl was opened in a
   # subdirectory of the project.
   getRootProject: (currentPath, limit=0) ->
@@ -156,13 +140,3 @@ class LocalReplProcess
 
   getCurrentNs: ->
     @conn.getCurrentNs()
-
-  interrupt: ->
-    @conn.interrupt()
-    @replView.info("Interrupting")
-
-  # Stops the running process
-  stop: ()->
-    @conn.close()
-    @process?.send event: 'kill'
-    @process = null

@@ -16,9 +16,7 @@
 (defn pretty-edn [edn-string]
   (try
     (with-out-str (fipp/pprint (edn/read-string edn-string)))
-    (catch :default err
-      (js/console.error "Error formatting repl result:" err)
-      edn-string)))
+    (catch :default err edn-string)))
 
 (defn edn->display-tree
   "Parses the edn string and returns a displayable tree. A tree is an array

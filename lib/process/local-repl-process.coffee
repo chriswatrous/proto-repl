@@ -54,13 +54,13 @@ class LocalReplProcess
         null
 
   start: (projectPath, connOptions)->
-    if @running()
-      return
+    # if @running()
+    #   return
 
     # Default project path to the current directory. This can still set the
     # projectPath to null if no file is opened in atom.
-    unless projectPath?
-      projectPath = atom.project.getPaths()[0]
+    # unless projectPath?
+    #   projectPath = atom.project.getPaths()[0]
 
     # Search for a project.clj or build.boot or gradle wrapper
     # file. The if must be used in case of no directory open in Atom.

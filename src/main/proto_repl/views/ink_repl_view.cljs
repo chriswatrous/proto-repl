@@ -82,6 +82,7 @@
     (.activate)
     (.setModes #js[#js{:name "proto-repl" :default true :grammar "source.clojure"}])
     ; called when the user clicks the "Run" toolbar button
+    ; using fully qualified name to avoid circular dependency
     (.onEval #(proto-repl.commands/execute-text-entered-in-repl))
     (aset "destroy" destroy)))
 

@@ -32,3 +32,7 @@
                          :port port
                          :messageHandler on-message
                          :startCallback on-start}))}))
+
+(comment
+  (+ 1 1)
+  (System/currentTimeMillis))

@@ -6,8 +6,7 @@
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
             [proto-repl.repl-connection :as rc]
             [proto-repl.repl-connection.remote :refer [connect-to-remote-repl]]
-            [proto-repl.repl-connection.process :refer [start-repl-process]]
-            [proto-repl.repl-connection.self-hosted :refer [start-self-hosted-repl]]))
+            [proto-repl.repl-connection.process :refer [start-repl-process]]))
 
 (def ^:private TreeView (js/require "../lib/tree-view"))
 (def ^:private Spinner (js/require "../lib/load-widget"))
@@ -26,10 +25,7 @@
   (on-did-start [this callback])
   (on-did-stop [this callback])
   (running? [this])
-  (self-hosted? [this])
-  (start-process-if-not-running [this project-path])
   (start-remote-repl-connection [this {:keys [host port]}])
-  (start-self-hosted-connection [this])
 
   (doc [this text])
   (info [this text])
@@ -181,16 +177,6 @@ You can disable this help text in the settings.")
     (.on emitter "proto-repl-repl:stop" callback))
 
   (running? [_] (some-> @connection rc/running?))
-  (self-hosted? [this] (-> this get-type (= "SelfHosted")))
-
-  (start-process-if-not-running [this project-path]
-    (when-not-running this
-      (fn [] (reset! connection (start-repl-process
-                                  {:view view
-                                   :project-path project-path
-                                   :on-message #(handle-connection-message this %)
-                                   :on-start #(handle-repl-started this)
-                                   :on-stop #(handle-repl-stopped this)})))))
 
   (start-remote-repl-connection [this {:keys [host port]}]
     (when-not-running this
@@ -201,15 +187,6 @@ You can disable this help text in the settings.")
                                    :view view
                                    :on-message #(handle-connection-message this %)
                                    :on-start #(handle-repl-started this)
-                                   :on-stop #(handle-repl-stopped this)})))))
-
-  (start-self-hosted-connection [this]
-    (when-not-running this
-      (fn [] (reset! connection (start-self-hosted-repl
-                                  {:view view
-                                   :on-message #(handle-connection-message this %)
-                                   :on-start (fn [] (info this "Self Hosted REPL Started!")
-                                                    (handle-repl-started this))
                                    :on-stop #(handle-repl-stopped this)})))))
 
   (doc [_ text] (rv/doc view text))

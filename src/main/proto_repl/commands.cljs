@@ -29,7 +29,7 @@
 (defn execute-code-in-ns
   ([code] (execute-code-in-ns code {}))
   ([code options]
-   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
+   (when-let [editor (get-active-text-editor)]
      (execute-code code (assoc options :ns (.findNsDeclaration editor-utils editor))))))
 
 
@@ -64,19 +64,15 @@
   (.registerCodeExecutionExtension extensions-feature name callback))
 
 
-(defn self-hosted? [] (-> @repl r/self-hosted?))
-
-
 (defn- flash-highlight-range [editor range]
   (let [marker (.markBufferRange editor range)]
     (.decorateMarker editor marker #js {:type "highlight" :class "block-execution"})
     (js/setTimeout #(.destroy marker) 350)))
 
-
 (defn execute-block
   ([] (execute-block {}))
   ([options]
-   (when-let [editor (.getActiveTextEditor js/atom.workspace)]
+   (when-let [editor (get-active-text-editor)]
      (when-let [range (.getCursorInBlockRange editor-utils editor (clj->js options))]
        (flash-highlight-range editor range)
        (let [text (-> editor (.getTextInBufferRange range) .trim)
@@ -215,12 +211,10 @@
   function. Will invoke the optional callback if refresh is successful."
   ([] (refresh-namespaces nil))
   ([callback]
-   (if (self-hosted?)
-     (stderr "Refreshing not supported in self hosted REPL.")
-     (do (info "Refreshing code...")
-         (execute-code refresh-namespaces-code
-                       {:displayInRepl false
-                        :resultHandler #(refresh-result-handler % callback)})))))
+   (info "Refreshing code...")
+   (execute-code refresh-namespaces-code
+                 {:displayInRepl false
+                  :resultHandler #(refresh-result-handler % callback)})))
 
 
 (defn super-refresh-namespaces
@@ -230,13 +224,11 @@
   successful."
   ([] (super-refresh-namespaces nil))
   ([callback]
-   (if (self-hosted?)
-     (stderr "Refreshing not supported in self hosted REPL.")
-     (do (info "Refreshing code...")
-         (execute-code '(when (find-ns 'clojure.tools.namespace.repl)
-                          (eval '(clojure.tools.namespace.repl/clear)))
-                       {:displayInRepl false
-                        :resultHandler #(refresh-result-handler % callback)})))))
+   (info "Refreshing code...")
+   (execute-code '(when (find-ns 'clojure.tools.namespace.repl)
+                    (eval '(clojure.tools.namespace.repl/clear)))
+                 {:displayInRepl false
+                  :resultHandler #(refresh-result-handler % callback)})))
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -253,28 +245,6 @@
     (r/on-did-stop r
       (fn [] (.stopExtensionRequestProcessing extensions-feature)
              (.emit emitter "proto-repl:stopped")))))
-
-(defn toggle
-  "Start the REPL if it's not currently running."
-  ([] (toggle nil))
-  ([project-path]
-   (when-not @repl
-     (let [r (r/make-repl extensions-feature)]
-       (prepare-repl r)
-       (r/start-process-if-not-running r project-path)
-       (reset! repl r)))))
-
-(defn toggle-current-editor-dir
-  "Start the REPL in the directory of the file in the current editor."
-  []
-  (some-> (get-active-text-editor) .getPath dirname toggle))
-
-(defn start-self-hosted-repl []
-  (when-not @repl
-    (let [r (r/make-repl extensions-feature)]
-      (prepare-repl r)
-      (reset! repl r)
-      (r/start-self-hosted-connection r))))
 
 ;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -308,21 +278,17 @@
 
 (defn load-current-file []
   (when-let [editor (get-active-text-editor)]
-    (if (self-hosted?)
-      (stderr "Loading files is not supported yet in self hosted REPL.")
-      (let [filename (.getPath editor)]
-        (execute-code `(do (~'println "Loading File " ~filename)
-                           (~'load-file ~filename)))))))
+    (let [filename (.getPath editor)]
+      (execute-code `(do (~'println "Loading File " ~filename)
+                         (~'load-file ~filename))))))
 
 
 (defn run-tests-in-namespace []
   (when-let [editor (get-active-text-editor)]
-    (if (self-hosted?)
-      (stderr "Running tests is not supported yet in self hosted REPL.")
-      (let [run #(execute-code-in-ns '(clojure.test/run-tests))]
-        (if (js/atom.config.get "proto-repl.refreshBeforeRunningTestFile")
-          (refresh-namespaces run)
-          (run))))))
+    (let [run #(execute-code-in-ns '(clojure.test/run-tests))]
+      (if (js/atom.config.get "proto-repl.refreshBeforeRunningTestFile")
+        (refresh-namespaces run)
+        (run)))))
 
 (defn ^:private run-test-var-code [test-name]
   (template-replace
@@ -331,39 +297,30 @@
     {:test-name test-name}))
 
 (defn run-test-under-cursor []
-  (when-let [editor (get-active-text-editor)]
-    (if (self-hosted?)
-      (stderr "Running tests is not supported yet in self hosted REPL.")
-      (when-let [test-name (symbol (get-var-under-cursor editor))]
-        (js/console.log test-name)
-        (let [run #(execute-code (run-test-var-code test-name))]
-          (if (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
-            (refresh-namespaces run)
-            (run)))))))
+  (when-let [test-name (some-> (get-active-text-editor) get-var-under-cursor symbol)]
+    (let [run #(execute-code-in-ns (run-test-var-code test-name))]
 
+      (if (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
+        (refresh-namespaces run)
+        (run)))
+    (when (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
+      (await (refresh-namespaces)))
+    (execute-code-in-ns (run-test-var-code test-name))))
 
 (defn run-all-tests []
-  (if (self-hosted?)
-    (stderr "Running tests is not supported yet in self hosted REPL.")
-    (refresh-namespaces
-      #(execute-code '(def all-tests-future (future (time (clojure.test/run-all-tests))))))))
+  (refresh-namespaces
+    #(execute-code '(def all-tests-future (future (time (clojure.test/run-all-tests)))))))
 
 
 (defn- get-doc-code [var-name]
   (template-replace
-    (if (self-hosted?)
-      '(clojure.core/with-out-str (doc --var-name--))
-      '(do
-         (require 'clojure.repl)
-         (with-out-str (clojure.repl/doc --var-name--))))
+    '(do (require 'clojure.repl)
+         (with-out-str (clojure.repl/doc --var-name--)))
     {:var-name var-name}))
 
 
 (defn- parse-doc-result [value]
-  (-> (if (self-hosted?)
-        value
-        (edn/read-string value))
-      (str/replace #"^-+\n" "")))
+  (-> value edn/read-string (str/replace #"^-+\n" "")))
 
 
 (defn- show-doc-result-inline [result var-name editor]
@@ -405,17 +362,15 @@
                           {:displayInRepl false
                            :resultHandler (once #(show-doc-result % var-name editor))}))))
 
-
 (defn print-var-code [] nil
   (when-let [editor (get-active-text-editor)]
     (when-let [var-name (get-var-under-cursor editor)]
-      (if (self-hosted?)
-        (stderr "Showing source code is not yet supported in self hosted REPL.")
-        (execute-code-in-ns `(do
-                               (~'require 'clojure.repl)
-                               (~'with-out-str (clojure.repl/source ~(symbol var-name))))
-                            {:displayInRepl false
-                             :resultHandler (once #(show-doc-result % var-name editor))})))))
+      (execute-code-in-ns (template-replace
+                            '(do (require 'clojure.repl)
+                                 (with-out-str (clojure.repl/source --var-name--)))
+                            {:var-name var-name})
+                          {:displayInRepl false
+                           :resultHandler (once #(show-doc-result % var-name editor))}))))
 
 
 (defn- list-ns-vars-code [ns-name]
@@ -436,11 +391,9 @@
   (when-let [editor (get-active-text-editor)]
     (when-let [ns-name (get-var-under-cursor editor)]
       (println {:ns-name ns-name})
-      (if (self-hosted?)
-        (stderr "Listing namespace functions is not yet supported in self hosted REPL.")
-        (execute-code-in-ns (list-ns-vars-code ns-name)
-                            {:displayInRepl false
-                             :resultHandler (once #(show-doc-result % ns-name editor))})))))
+      (execute-code-in-ns (list-ns-vars-code ns-name)
+                          {:displayInRepl false
+                           :resultHandler (once #(show-doc-result % ns-name editor))}))))
 
 
 (defn list-ns-vars-with-docs-code [ns-name]
@@ -473,11 +426,9 @@
   (when-let [editor (get-active-text-editor)]
     (when-let [ns-name (get-var-under-cursor editor)]
       (println {:ns-name ns-name})
-      (if (self-hosted?)
-        (stderr "Listing namespace functions is not yet supported in self hosted REPL.")
-        (execute-code-in-ns (list-ns-vars-with-docs-code ns-name)
-                            {:displayInRepl false
-                             :resultHandler (once #(show-doc-result % ns-name editor))})))))
+      (execute-code-in-ns (list-ns-vars-with-docs-code ns-name)
+                          {:displayInRepl false
+                           :resultHandler (once #(show-doc-result % ns-name editor))}))))
 
 (defn- open-file-containing-var-code [var-name]
   (template-replace
@@ -564,8 +515,6 @@
   []
   (when-let [editor (get-active-text-editor)]
     (when-let [var-name (get-var-under-cursor editor)]
-      (if (self-hosted?)
-        (stderr "Opening files containing vars is not yet supported in self hosted REPL.")
-        (execute-code-in-ns (open-file-containing-var-code var-name)
-                            {:displayInRepl false
-                             :resultHandler (once handle-open-file-result)})))))
+      (execute-code-in-ns (open-file-containing-var-code var-name)
+                          {:displayInRepl false
+                           :resultHandler (once handle-open-file-result)}))))

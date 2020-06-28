@@ -189,12 +189,9 @@
              "proto-repl:run-all-tests" #(c/run-all-tests)
              "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
              "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
-             "proto-repl:start-self-hosted-repl" #(c/start-self-hosted-repl)
              "proto-repl:stop-autoeval-file" #(c/stop-autoeval-file)
              "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
-             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
-             "proto-repl:toggle-current-project-clj" #(c/toggle-current-editor-dir)
-             "proto-repl:toggle" #(c/toggle)}))))
+             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)}))))
 
 
 (defn- deactivate []
@@ -219,8 +216,6 @@
        :onDidClose #(.on c/emitter "proto-repl:closed" %)
        :onDidStop #(.on c/emitter "proto-repl:stopped" %)
        :running #(r/running? @repl)
-       :getReplType #(r/get-type @repl)
-       :isSelfHosted c/self-hosted?
        :registerCodeExecutionExtension c/register-code-execution-extension
        :getClojureVarUnderCursor c/get-var-under-cursor
        :executeCode #(c/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))

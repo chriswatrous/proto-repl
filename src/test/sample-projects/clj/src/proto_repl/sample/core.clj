@@ -9,6 +9,8 @@
 
 ; execute-top-block (cmd-enter) --------------------------------------------------------------------
 
+; FIXME cursor should stay in current editor window after first evaluation
+
 ; run command on each character of expression
 (+ 1 1)
 
@@ -87,6 +89,11 @@ map
 
 ; Type something in the REPL input field and press shift-enter
 
+; Type something in the REPL input field and then eval the expression below.
+; The entered text should still be in the input field.
+(comment
+  (+ 1 1))
+
 
 ; exit-repl (ctrl-, e) -----------------------------------------------------------------------------
 
@@ -161,6 +168,8 @@ map
 
 (comment map)
 
+; FIXME doesn't work for this
+(defn blah [])
 
 ; print-var-documentation (cmd-shift-d) ------------------------------------------------------------
 
@@ -168,7 +177,7 @@ map
 (comment map)
 
 ; get doc for this
-(defn blah
+(defn blah2
   "Sample docstring with special characters.
   ~`!@#$%^&*()_-+={[}]|\\:;'\"<,>.?/
   end"

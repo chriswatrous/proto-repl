@@ -1,7 +1,8 @@
 (ns proto-repl.utils
   (:require [cljs.reader :as r]
             [clojure.edn :as edn]
-            [fipp.edn :as fipp]))
+            [fipp.edn :as fipp]
+            [clojure.string :as str]))
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
@@ -65,3 +66,21 @@
 
 (defn empty->nil [o]
   (if (empty? o) nil o))
+
+(defn template-replace
+  "Perform replacements on a template.
+
+  template - anything that can be converted to string (such as a quoted Clojure expression)
+  replacements - map of replacements
+
+  The placeholders should be sorrounded by double dashes like this:
+    --some-thing--
+    --other-thing--
+
+  The replacement map would look like:
+    {:some-thing \"the value\"}
+     :other-thing \"another value\"}"
+  [template replacements]
+  (reduce (fn [out [k v]] (str/replace out (str "--" (name k) "--") v))
+          (str template)
+          replacements))

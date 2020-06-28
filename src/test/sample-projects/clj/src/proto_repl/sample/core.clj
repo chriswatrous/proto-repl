@@ -100,24 +100,27 @@ map
   (Thread/sleep 60000))
 
 
-; list-ns-vars (alt-cmd-n) -------------------------------------------------------------------------
+; list-ns-vars (alt-cmd-n or ctrl-, n) -------------------------------------------------------------
 
 ; FIXME doesn't work
 ; FIXME key bindings get screwed up after cmd-alt-n:
 ; - ctrl key shows keyboard help but backtick key fixes
 ; - doesn't happen with ctrl-, n
-(comment
-  clojure.string
-  (clojure.string/split))
+(comment clojure.string)
 
 
 ; list-ns-vars-with-docs (cmd-alt-shift-n) ---------------------------------------------------------
 
-(comment
-  clojure.string)
+(comment clojure.set)
 
 
 ; load-current-file (cmd-alt-shift-f) --------------------------------------------------------------
+
+; TODO Should this just send the text of the file instead of telling the remote process to read
+; the file from disk?
+; - no need to save first
+; - would still work when the path from the editor's point of view is different from the path from
+;   the remote process's point of view
 
 ; run command with cursor outside of any expression
 (println "loading" (namespace ::x))
@@ -133,6 +136,7 @@ map
   other/g ; other file
   map ; Clojure standard library
   nrepl.cmdline/-main ; third party library
+  clojure.string ; namespace FIXME should go to the beginning of the file
 
   ; TODO would be nice if it worked on Java classes or at least print a message saying it doesn't
   ; work on Java classes

@@ -6,7 +6,8 @@
             [proto-repl.editor-utils :refer [get-active-text-editor]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
-            [proto-repl.views.nrepl-connection-view :as cv]))
+            [proto-repl.views.nrepl-connection-view :as cv]
+            [proto-repl.utils :refer [template-replace]]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -323,9 +324,11 @@
           (refresh-namespaces run)
           (run))))))
 
-(def ^:private run-test-var-template
-  '(do (clojure.test/test-vars [#'--test-name--])
-       (clojure.core/println "tested" '--test-name--)))
+(defn ^:private run-test-var-code [test-name]
+  (template-replace
+    '(do (clojure.test/test-vars [#'--test-name--])
+         (clojure.core/println "tested" '--test-name--))
+    {:test-name test-name}))
 
 (defn run-test-under-cursor []
   (when-let [editor (get-active-text-editor)]
@@ -333,8 +336,7 @@
       (stderr "Running tests is not supported yet in self hosted REPL.")
       (when-let [test-name (symbol (get-var-under-cursor editor))]
         (js/console.log test-name)
-        (let [run #(execute-code (str/replace (str run-test-var-template)
-                                              #"--test-name--" test-name))]
+        (let [run #(execute-code (run-test-var-code test-name))]
           (if (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
             (refresh-namespaces run)
             (run)))))))
@@ -347,21 +349,21 @@
       #(execute-code '(def all-tests-future (future (time (clojure.test/run-all-tests))))))))
 
 
-(defn- remove-dashes [s] (str/replace s #"^-+\n" ""))
-
-
 (defn- get-doc-code [var-name]
-  (-> (if (self-hosted?)
-        '(clojure.core/with-out-str (doc var-name))
-        '(do
-           (require 'clojure.repl)
-           (with-out-str (clojure.repl/doc var-name))))
-      str
-      (str/replace #"var-name" var-name)))
+  (template-replace
+    (if (self-hosted?)
+      '(clojure.core/with-out-str (doc --var-name--))
+      '(do
+         (require 'clojure.repl)
+         (with-out-str (clojure.repl/doc --var-name--))))
+    {:var-name var-name}))
 
 
 (defn- parse-doc-result [value]
-  (remove-dashes (if (self-hosted?) value (edn/read-string value))))
+  (-> (if (self-hosted?)
+        value
+        (edn/read-string value))
+      (str/replace #"^-+\n" "")))
 
 
 (defn- show-doc-result-inline [result var-name editor]
@@ -417,15 +419,15 @@
 
 
 (defn- list-ns-vars-code [ns-name]
-  (-> '(do
-         (require 'clojure.repl)
-         (let [selected-symbol 'ns-name
-               selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
-           (str "Vars in " selected-ns ":\n"
-                "------------------------------\n"
-                (str/join "\n" (clojure.repl/dir-fn selected-ns)))))
-      str
-      (str/replace #"ns-name" ns-name)))
+  (template-replace
+    '(do
+       (require 'clojure.repl)
+       (let [selected-symbol '--ns-name--
+             selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
+         (str "Vars in " selected-ns ":\n"
+              "------------------------------\n"
+              (str/join "\n" (clojure.repl/dir-fn selected-ns)))))
+    {:ns-name ns-name}))
 
 
 (defn list-ns-vars
@@ -442,27 +444,27 @@
 
 
 (defn list-ns-vars-with-docs-code [ns-name]
-  (-> '(do
-         (require 'clojure.repl)
-         (require 'clojure.string)
-         (let [selected-symbol 'ns-name
-               selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
-           (str selected-ns ":\n"
-                " " (:doc (meta (the-ns selected-ns))) "\n"
-                (clojure.string/join
-                  "\n"
-                  (for [s (clojure.repl/dir-fn selected-ns)
-                        :let [m (-> (str selected-ns "/" s) symbol find-var meta)]]
-                    (str "---------------------------\n"
-                         (:name m) "\n"
-                         (cond
-                           (:forms m) (->> (:forms m)
-                                           (map #(str "  " (pr-str %)))
-                                           (clojure.string/join "\n"))
-                           (:arglists m) (pr-str (:arglists m)))
-                         "\n  " (:doc m)))))))
-      str
-      (str/replace #"ns-name" ns-name)))
+  (template-replace
+    '(do
+       (require 'clojure.repl)
+       (require 'clojure.string)
+       (let [selected-symbol '--ns-name--
+             selected-ns (get (ns-aliases *ns*) selected-symbol selected-symbol)]
+         (str selected-ns ":\n"
+              " " (:doc (meta (the-ns selected-ns))) "\n"
+              (clojure.string/join
+                "\n"
+                (for [s (clojure.repl/dir-fn selected-ns)
+                      :let [m (-> (str selected-ns "/" s) symbol find-var meta)]]
+                  (str "---------------------------\n"
+                       (:name m) "\n"
+                       (cond
+                         (:forms m) (->> (:forms m)
+                                         (map #(str "  " (pr-str %)))
+                                         (clojure.string/join "\n"))
+                         (:arglists m) (pr-str (:arglists m)))
+                       "\n  " (:doc m)))))))
+    {:ns-name ns-name}))
 
 
 (defn list-ns-vars-with-docs
@@ -477,69 +479,71 @@
                             {:displayInRepl false
                              :resultHandler (once #(show-doc-result % ns-name editor))})))))
 
-(def ^:private open-file-containing-var-template
-  '(do
-     (require 'clojure.repl)
-     (require 'clojure.java.shell)
-     (require 'clojure.java.io)
-     (let [path-endings
-           (fn [path]
-             (let [parts (-> path (clojure.string/replace #"^/" "") (clojure.string/split #"/"))]
-               (map #(clojure.string/join "/" (drop % parts))
-                    (range (count parts)))))
-           get-resource
-           (fn [file]
-             (-> file java.io.File. .toURI .getPath path-endings
-                 (->> (keep #(.getResource (clojure.lang.RT/baseLoader) %))
-                      first)))
-           resource->file-path
-           (fn [res]
-             (when res
-               (let [uri (-> res .toURI .normalize)]
-                 (if (.isOpaque uri)
-                   (let [url (.toURL uri)
-                         conn (.openConnection url)
-                         file (java.io.File. (.. conn getJarFileURL toURI))]
-                     (str (.getAbsolutePath file) "!"
-                          (second (clojure.string/split (.getPath url) #"!"))))
-                   (.getAbsolutePath (java.io.File. uri))))))
-           var-sym '--var-name--
-           the-var (-> (get (ns-aliases *ns*) var-sym)
-                       (or (find-ns var-sym))
-                       (some->> clojure.repl/dir-fn
-                                first
-                                name
-                                (str (name var-sym) "/")
-                                symbol)
-                       (or var-sym))
-           {:keys [file line protocol]} (meta (eval `(var ~the-var)))
-           _ (when (and (nil? file) protocol)
-               (throw (Exception. (str "The var " var-sym " is part of a protocol which "
-                                       "Proto REPL is currently unable to open."))))
-           res (get-resource file)
-           file-path (resource->file-path res)]
-       (if-let [[_ jar-path partial-jar-path within-file-path]
-                (re-find #"(.+\.m2.repository.(.+\.jar))!/(.+)" file-path)]
-         (let [decompressed-path (-> (str (System/getProperty "user.home")
-                                          "/.lein/tmp-atom-jars/" partial-jar-path)
-                                     java.io.File.
-                                     .getAbsolutePath)
-               decompressed-file-path (.getAbsolutePath
-                                        (java.io.File. decompressed-path within-file-path))
-               decompressed-path-dir (clojure.java.io/file decompressed-path)]
-           (when-not (.exists decompressed-path-dir)
-             (println "decompressing" jar-path "to" decompressed-path)
-             (.mkdirs decompressed-path-dir)
-             (let [jar-file (java.util.jar.JarFile. jar-path)]
-               (run! (fn [jar-entry]
-                       (let [file (java.io.File. decompressed-path (.getName jar-entry))]
-                         (when-not (.isDirectory jar-entry)
-                           (.mkdirs (.getParentFile file))
-                           (with-open [is (.getInputStream jar-file jar-entry)]
-                             (clojure.java.io/copy is file)))))
-                     (seq (.toArray (.stream jar-file))))))
-           [decompressed-file-path line])
-         [file-path line]))))
+(defn- open-file-containing-var-code [var-name]
+  (template-replace
+    '(do
+       (require 'clojure.repl)
+       (require 'clojure.java.shell)
+       (require 'clojure.java.io)
+       (let [path-endings
+             (fn [path]
+               (let [parts (-> path (clojure.string/replace #"^/" "") (clojure.string/split #"/"))]
+                 (map #(clojure.string/join "/" (drop % parts))
+                      (range (count parts)))))
+             get-resource
+             (fn [file]
+               (-> file java.io.File. .toURI .getPath path-endings
+                   (->> (keep #(.getResource (clojure.lang.RT/baseLoader) %))
+                        first)))
+             resource->file-path
+             (fn [res]
+               (when res
+                 (let [uri (-> res .toURI .normalize)]
+                   (if (.isOpaque uri)
+                     (let [url (.toURL uri)
+                           conn (.openConnection url)
+                           file (java.io.File. (.. conn getJarFileURL toURI))]
+                       (str (.getAbsolutePath file) "!"
+                            (second (clojure.string/split (.getPath url) #"!"))))
+                     (.getAbsolutePath (java.io.File. uri))))))
+             var-sym '--var-name--
+             the-var (-> (get (ns-aliases *ns*) var-sym)
+                         (or (find-ns var-sym))
+                         (some->> clojure.repl/dir-fn
+                                  first
+                                  name
+                                  (str (name var-sym) "/")
+                                  symbol)
+                         (or var-sym))
+             {:keys [file line protocol]} (meta (eval `(var ~the-var)))
+             _ (when (and (nil? file) protocol)
+                 (throw (Exception. (str "The var " var-sym " is part of a protocol which "
+                                         "Proto REPL is currently unable to open."))))
+             res (get-resource file)
+             file-path (resource->file-path res)]
+         (if-let [[_ jar-path partial-jar-path within-file-path]
+                  (re-find #"(.+\.m2.repository.(.+\.jar))!/(.+)" file-path)]
+           (let [decompressed-path (-> (str (System/getProperty "user.home")
+                                            "/.lein/tmp-atom-jars/" partial-jar-path)
+                                       java.io.File.
+                                       .getAbsolutePath)
+                 decompressed-file-path (.getAbsolutePath
+                                          (java.io.File. decompressed-path within-file-path))
+                 decompressed-path-dir (clojure.java.io/file decompressed-path)]
+             (when-not (.exists decompressed-path-dir)
+               (println "decompressing" jar-path "to" decompressed-path)
+               (.mkdirs decompressed-path-dir)
+               (let [jar-file (java.util.jar.JarFile. jar-path)]
+                 (run! (fn [jar-entry]
+                         (let [file (java.io.File. decompressed-path (.getName jar-entry))]
+                           (when-not (.isDirectory jar-entry)
+                             (.mkdirs (.getParentFile file))
+                             (with-open [is (.getInputStream jar-file jar-entry)]
+                               (clojure.java.io/copy is file)))))
+                       (seq (.toArray (.stream jar-file))))))
+             [decompressed-file-path line])
+           [file-path line])))
+    {:var-name var-name}))
 
 
 (defn- handle-open-file-result [result]
@@ -562,7 +566,6 @@
     (when-let [var-name (get-var-under-cursor editor)]
       (if (self-hosted?)
         (stderr "Opening files containing vars is not yet supported in self hosted REPL.")
-        (execute-code-in-ns (str/replace (str open-file-containing-var-template)
-                                         #"--var-name--" var-name)
+        (execute-code-in-ns (open-file-containing-var-code var-name)
                             {:displayInRepl false
                              :resultHandler (once handle-open-file-result)})))))

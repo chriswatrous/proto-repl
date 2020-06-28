@@ -1,6 +1,7 @@
 (ns proto-repl.commands
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
+            [clojure.pprint :as pp]
             ["atom" :refer [Emitter]]
             ["path" :refer [dirname]]
             [proto-repl.editor-utils :refer [get-active-text-editor]]
@@ -14,10 +15,9 @@
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 (def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
 
-(defonce emitter (Emitter.))
-(defonce extensions-feature (ExtensionsFeature.))
-(defonce repl (atom nil))
-
+(defonce ^:private emitter (Emitter.))
+(defonce ^:private extensions-feature (ExtensionsFeature.))
+(defonce ^:private repl (atom nil))
 
 (defn execute-code
   "Execute the given code string in the REPL. See proto-repl.repl/execute-code for supported
@@ -169,28 +169,28 @@
 
 (def ^:private refresh-namespaces-code
   '(do
-    (try
-      (require 'user)
-      (catch java.io.FileNotFoundException e
-        (println (str "No user namespace defined. Defaulting to "
-                      "clojure.tools.namespace.repl/refresh."))))
-    (try
-      (require 'clojure.tools.namespace.repl)
-      (catch java.io.FileNotFoundException e
-        (println (str "clojure.tools.namespace.repl not available. Add proto-repl in your "
-                      "project.clj as a dependency to allow refresh. See "
-                      "https://clojars.org/proto-repl"))))
-    (let [refresh (or (find-var 'user/reset) (find-var 'clojure.tools.namespace.repl/refresh))
-          result
-          (if refresh
-            (refresh)
-            (println (str "You can use your own refresh function, just define reset function in "
-                          "user namespace\n"
-                          "See this https://github.com/clojure/tools.namespace#"
-                          "reloading-code-motivation for why you should use it.")))]
-      (when (isa? (type result) Exception)
-        (println (.getMessage result)))
-      result)))
+     (try
+       (require 'user)
+       (catch java.io.FileNotFoundException e
+         (println "No user namespace defined. Defaulting to"
+                  "clojure.tools.namespace.repl/refresh.")))
+     (try
+       (require 'clojure.tools.namespace.repl)
+       (catch java.io.FileNotFoundException e
+         (println "clojure.tools.namespace.repl not available. Add proto-repl in your project.clj"
+                  "as a dependency to allow refresh. See https://clojars.org/proto-repl")))
+     (let [refresh (or (find-var 'user/reset) (find-var 'clojure.tools.namespace.repl/refresh))
+           result
+           (if refresh
+             (refresh)
+             (println "You can use your own refresh function, just define reset function in user"
+                      "namespace\n"
+                      "See this"
+                      "https://github.com/clojure/tools.namespace#reloading-code-motivation"
+                      "for why you should use it."))]
+       (when (isa? (type result) Exception)
+         (println (.getMessage result)))
+       result)))
 
 
 (defn- refresh-result-handler [result callback]

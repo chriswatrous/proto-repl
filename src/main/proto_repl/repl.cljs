@@ -12,6 +12,7 @@
 (def ^:private TreeView (js/require "../lib/tree-view"))
 (def ^:private Spinner (js/require "../lib/load-widget"))
 
+
 (defprotocol Repl
   (clear [this])
   (execute-code* [this code options])
@@ -140,7 +141,10 @@ You can disable this help text in the settings.")
 
   (execute-entered-text [this]
     (when (running? this)
-      (rv/execute-entered-text view)))
+      (when-let [text (not-empty (rv/get-and-clear-entered-text view))]
+        (execute-code this text {:displayCode text
+                                 :doBlock true
+                                 :alwaysDisplay true}))))
 
   (exit [this]
     (when (running? this)

@@ -35,14 +35,11 @@
       (.setText editor code)
       (new-input this old-text)))
 
-  (execute-entered-text [this]
+  (get-and-clear-entered-text [this]
     (let [editor (-> @console .getInput .-editor)
-          code (-> editor .getText str/trim)]
-      (when (seq code)
-        (.setText editor "")
-        (proto-repl.commands/execute-code code {:displayCode code
-                                                :doBlock true
-                                                :alwaysDisplay true}))))
+          text (-> editor .getText str/trim)]
+      (.setText editor "")
+      text))
 
   (clear [_] (-> @console .reset))
   (info [_ text] (some-> @console (.info text)))

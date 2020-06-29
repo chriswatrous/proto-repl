@@ -24,19 +24,19 @@
   [code]
   (str/includes? code "#?"))
 
-(defn- options-to-sessions [{:keys [conn old]} options callback]
+(defn- options-to-sessions [{:keys [conn sessions-by-name old]} options callback]
   (cond
     (:allSessions options)
     (callback (concat [(.-session old) (.-cmdSession old)]
-                      (-> old .-sessionsByName js/Object.values)))
+                      (vals @sessions-by-name)))
     (:session options)
-    (if-let [s (-> old .-sessionsByName (aget (:session options)))]
+    (if-let [s (@sessions-by-name (:session options))]
       (callback [s])
       (do (.clone @conn
             (fn [err messages]
               (some-> err notify-error)
               (let [s (lodash.get messages #js[0 "new-session"])]
-                (aset (.-sessionsByName old) (:session options) s)
+                (swap! sessions-by-name assoc (:session options) s)
                 (callback [s]))))))
     (= (:displayInRepl options) false)
     (callback [(.-cmdSession old)])
@@ -94,7 +94,7 @@
                     (js/console.error e)
                     (notify-error e)))))))))))
 
-(defrecord NReplClient [host port conn on-stop old]
+(defrecord NReplClient [host port conn sessions-by-name on-stop old]
   ReplClient
   (get-type [_] "Remote")
   (get-current-ns [_] (.-currentNs old))
@@ -115,7 +115,7 @@
       (doto @conn
         (.close (.-session old))
         (.close (.-cmdSession old)))
-      (aset old "sessionsByName" #js{})
+      (reset! sessions-by-name {})
       (reset! conn nil))))
 
 (defn- determine-clojure-version [{:keys [conn old]} callback]
@@ -151,9 +151,13 @@
   (let [old #js{}
         host (or (not-empty host) "localhost")
         conn (atom (.connect nrepl #js {:port port :host host :verbose false}))
-        this (map->NReplClient {:host host :port port :on-stop on-stop :conn conn :old old})]
-    (aset old "messageHandlingStarted" false)
-    (aset old "sessionsByName" #js{})
+        this (map->NReplClient
+               {:host host
+                :port port
+                :conn conn
+                :sessions-by-name (atom {})
+                :on-stop on-stop
+                :old old})]
     (aset old "currentNs" default-ns)
     (.on @conn "error"
       (fn [err]
@@ -178,15 +182,7 @@
     this))
 
 (comment
-  (do (:old @(:connection @proto-repl.commands/repl)))
-
-  (-> proto-repl.commands/repl deref :connection deref :old .-conn)
-  (-> proto-repl.commands/repl deref :connection deref :old .-sessionsByName)
-
-  (->> proto-repl.commands/repl deref :connection deref :old)
-  (->> proto-repl.commands/repl)
-
-  (->> proto-repl.commands/repl deref :connection deref :old js/console.log))
+  (->> proto-repl.commands/repl deref :connection deref :old))
 
 
 (defn copy-plain [obj]

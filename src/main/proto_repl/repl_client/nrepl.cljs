@@ -24,7 +24,7 @@
   [code]
   (str/includes? code "#?"))
 
-(defn- options-to-sessions [{:keys [old]} options callback]
+(defn- options-to-sessions [{:keys [conn old]} options callback]
   (cond
     (:allSessions options)
     (callback (concat [(.-session old) (.-cmdSession old)]
@@ -32,7 +32,7 @@
     (:session options)
     (if-let [s (-> old .-sessionsByName (aget (:session options)))]
       (callback [s])
-      (do (.clone (.-conn old)
+      (do (.clone @conn
             (fn [err messages]
               (some-> err notify-error)
               (let [s (lodash.get messages #js[0 "new-session"])]
@@ -54,7 +54,7 @@
       (str "(eval (read-string {:read-cond :allow} " escaped-str "))"))
     code))
 
-(defn- send-command* [{:keys [old] :as this} command options callback]
+(defn- send-command* [{:keys [conn old] :as this} command options callback]
   (when (rc/running? this)
     (options-to-sessions this options
       (fn [sessions]
@@ -70,7 +70,7 @@
                                (when-let [editor (-> options :inlineOptions :editor)]
                                  {:file (.getPath editor)}))
                 cb-count (atom 0)]
-            (.send (.-conn old) (clj->js eval-options)
+            (.send @conn (clj->js eval-options)
               (fn [err messages]
                 (swap! cb-count inc)
                 (some-> err notify-error)
@@ -94,31 +94,32 @@
                     (js/console.error e)
                     (notify-error e)))))))))))
 
-(defrecord NReplClient [host port old on-stop]
+(defrecord NReplClient [host port conn on-stop old]
   ReplClient
   (get-type [_] "Remote")
   (get-current-ns [_] (.-currentNs old))
 
   (interrupt [this]
     (when (rc/running? this)
-      (let [conn (.-conn old)]
-        (.interrupt conn (.-session old) (fn [_ _]))
-        (.interrupt conn (.-cmdSession old) (fn [_ _])))))
+      (doto @conn
+        (.interrupt (.-session old) (fn [_ _]))
+        (.interrupt (.-cmdSession old) (fn [_ _])))))
 
-  (running? [_] (some? (.-conn old)))
+  (running? [_] (some? @conn))
 
   (send-command [this command options callback] (send-command* this command options callback))
 
   (stop [this]
     (when on-stop (on-stop))
     (when (rc/running? this)
-      (-> old .-conn (.close (.-session old)))
-      (-> old .-conn (.close (.-cmdSession old)))
+      (doto @conn
+        (.close (.-session old))
+        (.close (.-cmdSession old)))
       (aset old "sessionsByName" #js{})
-      (aset old "conn" nil))))
+      (reset! conn nil))))
 
-(defn- determine-clojure-version [{:keys [old]} callback]
-  (.eval (.-conn old) "*clojure-version*" "user" (.-session old)
+(defn- determine-clojure-version [{:keys [conn old]} callback]
+  (.eval @conn "*clojure-version*" "user" (.-session old)
     (fn [err messages]
       (some-> err notify-error)
       (aset old "clojureVersion" (-> messages first .-value js/window.protoRepl.parseEdn
@@ -132,8 +133,8 @@
 
 (defn- start-message-handling
   "Log any output from the nRepl connection messages"
-  [{:keys [old]} on-message]
-  (.on (-> old .-conn .-messageStream) "messageSequence"
+  [{:keys [conn old]} on-message]
+  (.on (.-messageStream @conn) "messageSequence"
     (fn [id messages]
       (when-not (contains-namespace-not-found-error? messages)
         (doseq [msg messages]
@@ -149,20 +150,19 @@
 (defn connect-to-nrepl [{:keys [host port on-message on-start on-stop]}]
   (let [old #js{}
         host (or (not-empty host) "localhost")
-        this (map->NReplClient {:host host :port port :on-stop on-stop :old old})
-        conn (.connect nrepl #js {:port port :host host :verbose false})]
-    (aset old "conn" conn)
+        conn (atom (.connect nrepl #js {:port port :host host :verbose false}))
+        this (map->NReplClient {:host host :port port :on-stop on-stop :conn conn :old old})]
     (aset old "messageHandlingStarted" false)
     (aset old "sessionsByName" #js{})
     (aset old "currentNs" default-ns)
-    (.on conn "error"
+    (.on @conn "error"
       (fn [err]
         (when (rc/running? this) (notify-error err))
-        (aset old "conn" nil)))
-    (.once conn "connect"
+        (reset! conn nil)))
+    (.once @conn "connect"
       (fn []
-        (.on conn "finish" #(aset old "conn" nil))
-        (.clone conn
+        (.on @conn "finish" #(reset! conn nil))
+        (.clone @conn
           (fn [err messages]
             (some-> err notify-error)
             (aset old "session" (lodash.get messages #js[0 "new-session"]))
@@ -170,7 +170,7 @@
               ; Handle multiple callbacks for this which can happen during REPL
               ; startup with cider-nrepl middleware for some reason.
               (memoize #(start-message-handling this on-message)))
-            (.clone conn
+            (.clone @conn
               (fn [err messages]
                 (some-> err notify-error)
                 (aset old "cmdSession" (lodash.get messages #js[0 "new-session"]))

@@ -7,20 +7,20 @@ EditorUtils = require '../editor-utils'
 module.exports =
 
 class NReplConnection
-  # The nrepl connection
-  conn: null
-
-  # The standard nREPL session
-  session: null
-
-  # A separate nREPL session for sending commands in which we do not want the result
-  # value sent to the REPL.
-  cmdSession: null
-
-  # A map of sessions to name. These are created on demand when needed.
-  sessionsByName: {}
-
-  clojureVersion: null
+  # # The nrepl connection
+  # conn: null
+  #
+  # # The standard nREPL session
+  # session: null
+  #
+  # # A separate nREPL session for sending commands in which we do not want the result
+  # # value sent to the REPL.
+  # cmdSession: null
+  #
+  # # A map of sessions to name. These are created on demand when needed.
+  # sessionsByName: {}
+  #
+  # clojureVersion: null
 
   determineClojureVersion: (callback)->
     @conn.eval "*clojure-version*", "user", @session, (err, messages)=>
@@ -77,68 +77,3 @@ class NReplConnection
     for msg in messages
       if msg.status?.length > 0
         return true if msg.status[0] == "namespace-not-found"
-
-  optionsToSessions: (options, callback)->
-    if options.allSessions
-      callback([@session, @cmdSession, Object.values(@sessionsByName)...])
-    else if options.session
-      if s = @sessionsByName[options.session]
-        callback([s])
-      else
-        @conn.clone (err, messages)=>
-          s = messages[0]["new-session"]
-          @sessionsByName[options.session] = s
-          callback([s])
-    else if options.displayInRepl == false
-      callback([@cmdSession])
-    else
-      callback([@session])
-
-  # Sends a command to the repl.
-  # * code - string of clojure code to execute
-  # * options - map of options
-  #   * displayInRepl - false to display the result in repl. Defaults to true.
-  #   * ns - the namespace to execute the code in.
-  # * resultHandler - The result handler to handle the resulting value.
-  sendCommand: (code, options, resultHandler)->
-    return null unless @connected()
-
-    @optionsToSessions options, (sessions)=> sessions.forEach (session)=>
-      # Wrap code in read eval to handle invalid code and reader conditionals
-      wrappedCode = @wrapCodeInReadEval(code)
-      ns = options.ns || @currentNs
-
-      evalOptions = {op: "eval", code: wrappedCode, ns: ns, session: session}
-      if options?.inlineOptions?.range?
-        evalOptions.line = options.inlineOptions.range.start.row + 1
-        evalOptions.column = options.inlineOptions.range.start.column + 1
-
-      if options?.inlineOptions?.editor
-        evalOptions.file = options.inlineOptions.editor.getPath()
-
-      @conn.send evalOptions, (err, messages)=>
-        try
-          # If the namespace hasn't been defined this will fail. We redefine the Namespace
-          # and retry.
-          if @namespaceNotFound(messages)
-            unless options.retrying
-              options.retrying = true # Must set this to prevent a double retry.
-              options.ns = @currentNs # Retry with current namespace.
-              @sendCommand(code, options, resultHandler)
-          else
-            for msg in messages
-              if msg.value
-                resultHandler(value: msg.value)
-              else if msg.err
-                resultHandler(error: msg.err)
-        catch error
-          console.error error
-          atom.notifications.addError "Error in handler: " + error,
-            detail: error, dismissable: true
-
-  close: ->
-    return null unless @connected()
-    @conn.close @session, => return
-    @conn.close @cmdSession, => return
-    @sessionsByName = {}
-    @conn = null

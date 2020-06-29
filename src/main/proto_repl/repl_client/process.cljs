@@ -1,5 +1,5 @@
-(ns proto-repl.repl-connection.process
-  (:require [proto-repl.repl-connection :refer [ReplConnection] :as rc]
+(ns proto-repl.repl-client.process
+  (:require [proto-repl.repl-client.core :refer [ReplClient] :as rc]
             [proto-repl.views.repl-view :as rv]))
 
 (def ^:private NReplConnection (js/require "../lib/process/nrepl-connection"))
@@ -15,16 +15,11 @@
                                    :startCallback on-start
                                    :stopCallback on-stop})))))
 
-(defrecord ProcessReplConnection [old conn view]
-  ReplConnection
+(defrecord ProcessReplConnection [old conn]
+  ReplClient
   (get-type [_] "Process")
-
   (get-current-ns [_] (.getCurrentNs conn))
-
-  (interrupt [_]
-    (.interrupt conn)
-    (rv/info view "Interrupting"))
-
+  (interrupt [_] (.interrupt conn))
   (running? [_] (.connected conn))
 
   (send-command [_ command options callback]

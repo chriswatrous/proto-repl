@@ -1,11 +1,11 @@
-(ns proto-repl.repl-connection.self-hosted
-  (:require [proto-repl.repl-connection :refer [ReplConnection]]
+(ns proto-repl.repl-client.self-hosted
+  (:require [proto-repl.repl-client.core :refer [ReplClient]]
             [proto-repl.views.repl-view :as rv]))
 
 (def ^:private SelfHostedProcess (js/require "../lib/process/self-hosted-process"))
 
 (defrecord SelfHostedReplConnection [old]
-  ReplConnection
+  ReplClient
   (get-type [_] (.getType old))
   (get-current-ns [_] (.getCurrentNs old))
   (interrupt [_] (.interrupt old))

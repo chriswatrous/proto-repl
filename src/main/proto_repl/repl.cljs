@@ -4,9 +4,9 @@
             [proto-repl.ink :as ink]
             [proto-repl.views.repl-view :as rv]
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
-            [proto-repl.repl-connection :as rc]
-            [proto-repl.repl-connection.remote :refer [connect-to-remote-repl]]
-            [proto-repl.repl-connection.process :refer [start-repl-process]]))
+            [proto-repl.repl-client.core :as rc]
+            [proto-repl.repl-client.nrepl :refer [connect-to-nrepl]]
+            [proto-repl.repl-client.process :refer [start-repl-process]]))
 
 (def ^:private TreeView (js/require "../lib/tree-view"))
 (def ^:private Spinner (js/require "../lib/load-widget"))
@@ -158,7 +158,8 @@ You can disable this help text in the settings.")
 
   (interrupt [_]
     (.clearAll spinner)
-    (rc/interrupt @connection))
+    (rc/interrupt @connection)
+    (rv/stderr view "Interrupted."))
 
   (make-inline-handler [this editor range value->tree]
     (fn [result]
@@ -181,10 +182,9 @@ You can disable this help text in the settings.")
   (start-remote-repl-connection [this {:keys [host port]}]
     (when-not-running this
       (fn [] (info this (str "Starting remote REPL connection on " host ":" port))
-             (reset! connection (connect-to-remote-repl
+             (reset! connection (connect-to-nrepl
                                   {:host host
                                    :port port
-                                   :view view
                                    :on-message #(handle-connection-message this %)
                                    :on-start #(handle-repl-started this)
                                    :on-stop #(handle-repl-stopped this)})))))

@@ -2,7 +2,7 @@ nrepl = require('jg-nrepl-client')
 ClojureVersion = require './clojure-version'
 EditorUtils = require '../editor-utils'
 
-DEFAULT_NS = "user"
+# DEFAULT_NS = "user"
 
 module.exports =
 
@@ -21,51 +21,6 @@ class NReplConnection
   sessionsByName: {}
 
   clojureVersion: null
-
-  currentNs: DEFAULT_NS
-
-  constructor: ()->
-    null
-
-  # Starts the nREPL connection.
-  start: ({host, port, messageHandler, startCallback})->
-    if @connected()
-      @close()
-
-    host ?= "localhost"
-    @conn = nrepl.connect({port: port, host: host, verbose: false})
-    messageHandlingStarted = false
-    @currentNs = DEFAULT_NS
-
-    # Handle and show errors
-    @conn.on 'error', (err)=>
-      # Don't display the error if we're not connected.
-      if @connected()
-        atom.notifications.addError "proto-repl: connection error", detail: err, dismissable: true
-      @conn = null
-
-    @conn.once 'connect', =>
-      # When repl connection closed
-      @conn.on 'finish', =>
-        @conn = null
-
-      # Create a persistent session
-      @conn.clone (err, messages)=>
-        @session = messages[0]["new-session"]
-
-        # Determine the Clojure Version
-        @determineClojureVersion =>
-          # Handle multiple callbacks for this which can happen during REPL startup
-          # with cider-nrepl middleware for some reason.
-          unless messageHandlingStarted
-            @startMessageHandling(messageHandler)
-            messageHandlingStarted = true
-
-        # Create a session for requests that we don't want the values printed to
-        # the repl.
-        @conn.clone (err, messages)=>
-          @cmdSession = messages[0]["new-session"]
-          startCallback()
 
   determineClojureVersion: (callback)->
     @conn.eval "*clojure-version*", "user", @session, (err, messages)=>
@@ -180,13 +135,6 @@ class NReplConnection
           console.error error
           atom.notifications.addError "Error in handler: " + error,
             detail: error, dismissable: true
-
-  interrupt: ->
-    return null unless @connected()
-    @conn.interrupt @session, (err, result)=>
-      null
-    @conn.interrupt @cmdSession, (err, result)=>
-      null
 
   close: ->
     return null unless @connected()

@@ -333,20 +333,12 @@
   (show-doc-result-in-console result var-name))
 
 
-; This is to prevent the result handler from running more than once on error.
-(defn- once [f]
-  (let [count (atom 0)]
-    (fn [& args]
-      (when (= (swap! count inc) 1)
-        (apply f args)))))
-
-
 (defn print-var-documentation []
   (when-let [editor (get-active-text-editor)]
     (when-let [var-name (get-var-under-cursor editor)]
       (execute-code-in-ns (get-doc-code var-name)
                           {:displayInRepl false
-                           :resultHandler (once #(show-doc-result % var-name editor))}))))
+                           :resultHandler (memoize #(show-doc-result % var-name editor))}))))
 
 (defn print-var-code [] nil
   (when-let [editor (get-active-text-editor)]
@@ -356,7 +348,7 @@
                                  (with-out-str (clojure.repl/source --var-name--)))
                             {:var-name var-name})
                           {:displayInRepl false
-                           :resultHandler (once #(show-doc-result % var-name editor))}))))
+                           :resultHandler (memoize #(show-doc-result % var-name editor))}))))
 
 
 (defn- list-ns-vars-code [ns-name]
@@ -377,7 +369,7 @@
       (println {:ns-name ns-name})
       (execute-code-in-ns (list-ns-vars-code ns-name)
                           {:displayInRepl false
-                           :resultHandler (once #(show-doc-result % ns-name editor))}))))
+                           :resultHandler (memoize #(show-doc-result % ns-name editor))}))))
 
 
 (defn list-ns-vars-with-docs-code [ns-name]
@@ -412,7 +404,7 @@
       (println {:ns-name ns-name})
       (execute-code-in-ns (list-ns-vars-with-docs-code ns-name)
                           {:displayInRepl false
-                           :resultHandler (once #(show-doc-result % ns-name editor))}))))
+                           :resultHandler (memoize #(show-doc-result % ns-name editor))}))))
 
 (defn- open-file-containing-var-code [var-name]
   (template-replace
@@ -500,4 +492,4 @@
   (when-let [var-name (some-> (get-active-text-editor) get-var-under-cursor)]
     (execute-code-in-ns (open-file-containing-var-code var-name)
                         {:displayInRepl false
-                         :resultHandler (once handle-open-file-result)})))
+                         :resultHandler (memoize handle-open-file-result)})))

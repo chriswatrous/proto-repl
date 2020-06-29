@@ -102,9 +102,12 @@ map
 
 ; interrupt (ctrl-shift-c) -------------------------------------------------------------------------
 
-; execute this and interrupt before it returns
+; TODO Maybe have this command only do something if an evaluation is waiting?
+
+; execute these and interrupt before the first one returns
 (comment
-  (Thread/sleep 60000))
+  (Thread/sleep 60000)
+  (+ 1 1))
 
 
 ; list-ns-vars (alt-cmd-n or ctrl-, n) -------------------------------------------------------------
@@ -208,6 +211,7 @@ map
 ; FIXME doesn't work if window is already open
 ; TODO would be nice if it printed a message when the connection is lost, maybe even try to
 ;      reconnect
+; TODO Maybe don't allow connection to be attempted with no port?
 
 
 ; toggle-auto-scroll (cmd-alt-shift-s) -------------------------------------------------------------

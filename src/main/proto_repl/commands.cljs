@@ -75,20 +75,19 @@
    (when-let [editor (get-active-text-editor)]
      (when-let [range (.getCursorInBlockRange editor-utils editor (clj->js options))]
        (flash-highlight-range editor range)
-       (let [text (-> editor (.getTextInBufferRange range) .trim)
+       (let [text (-> editor (.getTextInBufferRange range) str/trim)
              options (assoc options :displayCode text
                                     :inlineOptions {:editor editor
                                                     :range range})]
          (execute-code-in-ns text options))))))
 
 
-(defn execute-selected-text
-  "Executes the selected code."
+(defn execute-selected-text "Executes the selected code."
   ([] (execute-selected-text {}))
   ([options]
    (when-let [editor (get-active-text-editor)]
-     (let [text (.getSelectedText editor)
-           text (if (empty? text) (get-var-under-cursor editor) text)
+     (let [text (or (not-empty (.getSelectedText editor))
+                    (get-var-under-cursor editor))
            range (.getSelectedBufferRange editor)]
        (when (lodash.isEqual range.start range.end)
          (set! range.end.column ##Inf))
@@ -115,9 +114,7 @@
   (into [] (.getTopLevelRanges editor-utils editor)))
 
 
-(defn autoeval-file
-  "Turn on auto evaluation of the current file."
-  []
+(defn autoeval-file "Turn on auto evaluation of the current file." []
   (let [editor (get-active-text-editor)]
     (cond (not (js/atom.config.get "proto-repl.showInlineResults"))
           (stderr "Auto Evaling is not supported unless inline results is enabled")
@@ -132,9 +129,7 @@
               (execute-ranges editor (get-top-level-ranges editor)))))))
 
 
-(defn stop-autoeval-file
-  "Turns off autoevaling of the current file."
-  []
+(defn stop-autoeval-file "Turns off autoevaling of the current file." []
   (when-let [editor (get-active-text-editor)]
     (when editor.protoReplAutoEvalDisposable
       (.dispose editor.protoReplAutoEvalDisposable)
@@ -145,17 +140,14 @@
   (some-> @repl r/clear))
 
 
-(defn interrupt []
-  "Interrupt the currently executing command."
+(defn interrupt "Interrupt the currently executing command." []
   (some-> @repl r/interrupt))
 
 
 (defn exit-repl [] (-> @repl r/exit))
 
 
-(defn pretty-print
-  "Pretty print the last value"
-  []
+(defn pretty-print "Pretty print the last value" []
   (execute-code (str '(do (require 'clojure.pprint) (clojure.pprint/pp)))))
 
 
@@ -260,9 +252,7 @@
       (reset! repl r))))
 
 
-(defn remote-nrepl-connection
-  "Open the nRepl connection dialog."
-  []
+(defn remote-nrepl-connection "Open the nRepl connection dialog." []
   (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection)))
 
 
@@ -299,13 +289,9 @@
 (defn run-test-under-cursor []
   (when-let [test-name (some-> (get-active-text-editor) get-var-under-cursor symbol)]
     (let [run #(execute-code-in-ns (run-test-var-code test-name))]
-
       (if (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
         (refresh-namespaces run)
-        (run)))
-    (when (js/atom.config.get "proto-repl.refreshBeforeRunningSingleTest")
-      (await (refresh-namespaces)))
-    (execute-code-in-ns (run-test-var-code test-name))))
+        (run)))))
 
 (defn run-all-tests []
   (refresh-namespaces
@@ -385,9 +371,7 @@
     {:ns-name ns-name}))
 
 
-(defn list-ns-vars
-  "Lists all the vars in the selected namespace or namespace alias"
-  []
+(defn list-ns-vars "Lists all the vars in the selected namespace or namespace alias" []
   (when-let [editor (get-active-text-editor)]
     (when-let [ns-name (get-var-under-cursor editor)]
       (println {:ns-name ns-name})
@@ -513,8 +497,7 @@
   jar file then open it. It will first check to see if a jar file has already
   been decompressed once to avoid doing it multiple times for the same library."
   []
-  (when-let [editor (get-active-text-editor)]
-    (when-let [var-name (get-var-under-cursor editor)]
-      (execute-code-in-ns (open-file-containing-var-code var-name)
-                          {:displayInRepl false
-                           :resultHandler (once handle-open-file-result)}))))
+  (when-let [var-name (some-> (get-active-text-editor) get-var-under-cursor)]
+    (execute-code-in-ns (open-file-containing-var-code var-name)
+                        {:displayInRepl false
+                         :resultHandler (once handle-open-file-result)})))

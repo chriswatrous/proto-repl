@@ -220,6 +220,7 @@
        :getClojureVarUnderCursor c/get-var-under-cursor
        :executeCode #(c/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
        :executeCodeInNs #(c/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
+       :isSelfHosted (fn [] false)
 
        ; Utility functions
        :parseEdn (get-bind edn-reader :parse)

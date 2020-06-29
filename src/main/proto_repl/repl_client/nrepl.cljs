@@ -32,13 +32,24 @@
     :else
     (callback [(.-session old)])))
 
+(defn- wrap-code-in-read-eval
+  "Wraps the given code in an eval and a read-string. This is required for
+  handling reader conditionals. http://clojure.org/guides/reader_conditionals"
+  [{:keys [old]} code]
+  (if (and (some-> old .-clojureVersion (.isReaderConditionalSupported))
+           (.codeMayContainReaderConditional old code))
+    (let [escaped-str (EditorUtils.escapeClojureCodeInString code)]
+      (println "wrapped")
+      (str "(eval (read-string {:read-cond :allow} " escaped-str "))"))
+    code))
+
 (defn- send-command* [{:keys [old] :as this} command options callback]
   (when (rc/running? this)
     (options-to-sessions this options
       (fn [sessions]
         (doseq [session sessions]
           ; Wrap code in read eval to handle invalid code and reader conditionals
-          (let [wrapped-code (.wrapCodeInReadEval old command)
+          (let [wrapped-code (wrap-code-in-read-eval this command)
                 ns (or (:ns options) (.-currentNs old))
                 eval-options (merge
                                {:op "eval" :code wrapped-code :ns ns :session session}
@@ -75,7 +86,7 @@
 (defrecord NReplClient [host port old on-stop]
   ReplClient
   (get-type [_] "Remote")
-  (get-current-ns [_] (.getCurrentNs old))
+  (get-current-ns [_] (.-currentNs old))
 
   (interrupt [this]
     (when (rc/running? this)
@@ -85,8 +96,7 @@
 
   (running? [_] (some? (.-conn old)))
 
-  (send-command [this command options callback]
-    (send-command* this command options callback))
+  (send-command [this command options callback] (send-command* this command options callback))
 
   (stop [this]
     (when on-stop (on-stop))
@@ -95,6 +105,19 @@
       (-> old .-conn (.close (.-cmdSession old)))
       (aset old "sessionsByName" #js{})
       (aset old "conn" nil))))
+
+(defn- determine-clojure-version [{:keys [old]} callback]
+  (.eval (.-conn old) "*clojure-version*" "user" (.-session old)
+    (fn [err messages]
+      (some-> err notify-error)
+      (aset old "clojureVersion" (-> messages first .-value js/window.protoRepl.parseEdn
+                                     ClojureVersion.))
+      (when-not (.isSupportedVersion (.-clojureVersion old))
+        (js/atom.notifications.addWarning
+          (str "WARNING: This version of Clojure is not supported by Proto REPL. You may "
+               "experience issues.")
+          #js{:dismissable true}))
+      (callback))))
 
 (defn connect-to-nrepl [{:keys [host port on-message on-start on-stop]}]
   (let [old (NReplConnection.)
@@ -116,7 +139,7 @@
           (fn [err messages]
             (some-> err notify-error)
             (aset old "session" (lodash.get messages #js[0 "new-session"]))
-            (.determineClojureVersion old
+            (determine-clojure-version this
               ; Handle multiple callbacks for this which can happen during REPL
               ; startup with cider-nrepl middleware for some reason.
               (memoize #(.startMessageHandling old on-message)))
@@ -134,17 +157,10 @@
   (-> proto-repl.commands/repl deref :connection deref :old .-sessionsByName)
 
   (->> proto-repl.commands/repl deref :connection deref :old)
-  (->> proto-repl.commands/repl))
+  (->> proto-repl.commands/repl)
+
+  (->> proto-repl.commands/repl deref :connection deref :old js/console.log))
 
 
 (defn copy-plain [obj]
   (js/Object.assign #js{} obj))
-
-
-(defn obj-data [obj]
-  (let [obj (js/Object.assign #js{} obj)]
-    (doseq [key (js/Object.keys obj)]
-      (let [value (aget obj key)]
-        (when (lodash.isObject value)
-          (aset obj key (obj-data value)))))
-    obj))

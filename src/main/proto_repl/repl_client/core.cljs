@@ -1,7 +1,5 @@
 (ns proto-repl.repl-client.core)
 
-(def ^:private this-ns (namespace ::x))
-
 (defprotocol ReplClient
   (get-type [this])
   (get-current-ns [this])

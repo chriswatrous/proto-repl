@@ -5,7 +5,7 @@ GradleRunner = require.resolve './gradle-runner'
 ClojureRunner = require.resolve './clojure-runner'
 path = require 'path'
 fs = require('fs')
-NReplConnection = require './nrepl-connection'
+NReplConnection = null
 
 # The code to send to the repl to exit.
 EXIT_CMD="(System/exit 0)"

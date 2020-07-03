@@ -2,7 +2,7 @@
   (:require [proto-repl.repl-client.core :refer [ReplClient] :as rc]
             [proto-repl.views.repl-view :as rv]))
 
-(def ^:private NReplConnection (js/require "../lib/process/nrepl-connection"))
+(def ^:private NReplConnection nil)
 (def ^:private LocalReplProcess (js/require "../lib/process/local-repl-process"))
 
 (defn start [this {:keys [project-path on-message on-start on-stop]}]

@@ -225,3 +225,24 @@ map
 ;   run-all-tests
 ;   run-test-under-cursor
 ;   run-tests-in-namespace
+
+(comment
+  (require '[clojure.pprint :refer [pprint]])
+
+  (println "wqerq")
+  (.println System/out "qwer")
+  (.start (java.lang.Thread. #(println "asdf-----")))
+
+  (dotimes [_ 10]
+    (java.lang.Thread/sleep 1000)
+    (println "asdf"))
+
+  (pprint ())
+
+  (macroexpand-1 '
+   (ns proto-repl.sample.core
+     (:require [proto-repl.sample.other :as other]
+               ;delete later
+               [clojure.pprint :refer [pprint]])))
+
+  (in-ns (quote proto-repl.sample.core)))

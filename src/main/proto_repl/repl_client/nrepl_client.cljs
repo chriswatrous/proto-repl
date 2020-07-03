@@ -1,26 +1,40 @@
 (ns proto-repl.repl-client.nrepl-client
-  (:require [clojure.core.async :refer-macros [go]]))
+  (:require [clojure.core.async :as a
+                                :refer [chan buffer put! close!]
+                                :refer-macros [go go-loop]]))
 
 (def ^:private bencode (js/require "bencode"))
 (def ^:private net (js/require "net"))
 
+(declare message-chan)
+(declare s)
+(declare c)
+
 (comment
-  (js/console.log "qwer")
+  (do
+    (some-> message-chan close!)
+    (some-> s .destroy)
+    (def message-chan (chan (buffer 1) buffers->messages))
+    (def s
+      (doto (net.createConnection #js {:host "localhost" :port 2345})
+        ; important
+        (.on "ready" #(js/console.log "ready"))
+        (.on "close" #(close! message-chan))
+        (.on "data" #(put! message-chan %))
+        (.on "error" #(js/console.log "error" %&))
+        ; extra
+        (.on "lookup" #(js/console.log "lookup" %&))
+        (.on "connect" #(js/console.log "connect" %&))
+        (.on "timeout" #(js/console.log "timeout" %&))
+        (.on "drain" #(js/console.log "drain" %&))
+        (.on "end" #(js/console.log "end" %&))))
+    (go-loop []
+      (when-let [message (<! message-chan)]
+        (println "from channel:" message)
+        (recur))
+      (println "channel closed")))
 
-  (def s (net.connect #js {:host "localhost" :port 2345}))
-  (.destroy s)
-  (.on s "data"
-    (fn [data]
-      (js/console.log data)
-      (def d data)))
-       ; (try
-       ;   (println "data event" (bencode->clj %))
-       ;   (catch :default _
-       ;     (js/console.log "data event" %)))))
-  (.write s (clj->bencode {:op "ls-sessions"}) "binary")
-  (js/Object.assign #js {} (bencode.decode d))
-
-  (js/console.log (bencode.decode d "utf8")))
+  (send {:op "ls-sessions"}))
 
 
 (defn- bencode-response->clj [data]
@@ -42,3 +56,30 @@
   (-> buffer
       (bencode.decode "utf8")
       bencode-response->clj))
+
+(defn- try-bencode->clj
+  "Decode bencode data to cljs data or return nil if the buffer doesn't
+  contain a complete message."
+  [buffer]
+  (try
+    (bencode->clj buffer)
+    ; An exception will be thrown if the buffer is empty or doesn't
+    ; contain a complete bencode message.
+    (catch :default _)))
+
+(defn- send [data]
+  (.write s (clj->bencode data) "binary"))
+
+(defn- buffers->messages "A stateful transducer that converts Buffers to nREPL messages." [rf]
+  (let [buffer (volatile! (js/Buffer.from ""))]
+    (fn
+      ([] (rf))
+      ([result] (rf result))
+      ([result input]
+       (vswap! buffer #(js/Buffer.concat #js [% input]))
+       (reduce rf result
+               (loop [messages []]
+                 (if-let [m (try-bencode->clj @buffer)]
+                   (do (vswap! buffer #(.slice % (.-length (clj->bencode m))))
+                       (recur (conj messages m)))
+                   messages)))))))

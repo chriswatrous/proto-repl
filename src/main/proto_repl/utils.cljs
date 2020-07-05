@@ -84,3 +84,19 @@
   (reduce (fn [out [k v]] (str/replace out (str "--" (name k) "--") v))
           (str template)
           replacements))
+
+(defn get-config "Get a value from the package config." [key]
+  (js/atom.config.get (str "proto-repl." (lodash.camelCase (name key)))))
+
+(defn get-keybindings [command-key]
+  (->> (.findKeyBindings js/atom.keymaps #js {:command (str "proto-repl:" (name command-key))})
+       (mapv #(.-keystrokes %))))
+
+(defn wrap-reducer-try-log [rf]
+  (fn ([] (try (rf)
+               (catch :default err (js/console.error err))))
+      ([result] (try (rf result)
+                     (catch :default err (js/console.error err))))
+      ([result input] (try (rf result input)
+                           (catch :default err (js/console.error err)
+                                               (reduced nil))))))

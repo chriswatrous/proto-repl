@@ -187,37 +187,3 @@
                 (reset! cmd-session (lodash.get messages #js[0 "new-session"]))
                 (on-start)))))))
     this))
-
-
-(comment
-  (def c (nrepl.connect #js {:port 2345 :host "localhost" :verbose false}))
-
-  (js/console.log nrepl)
-  (js/console.log c)
-
-  (sort (js/Object.keys c))
-  (sort (js/Object.getOwnPropertyNames c))
-
-  (.clone c (fn [err messages & more]
-              (js/console.log "err" err)
-              (js/console.log "messages" messages)))
-
-  (def m (js->clj+ js/temp1))
-
-  ; .clone
-  ; .send
-  ; .interrupt
-  ; .close
-  ; .eval
-  ; .-messageStream
-
-  (def uuid (js/require "uuid"))
-  (uuid.v4)
-  (js/Buffer.from "")
-  (.log js/console "qwer"))
-
-(defn js->clj+ [data]
-  (-> data
-      js/JSON.stringify
-      js/JSON.parse
-      (js->clj :keywordize-keys true)))

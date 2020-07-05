@@ -70,32 +70,30 @@
     (js/setTimeout #(.destroy marker) 350)))
 
 (defn execute-block
-  ([] (execute-block {}))
-  ([options]
+  ([{:keys [top-level]}]
    (when-let [editor (get-active-text-editor)]
-     (when-let [range (.getCursorInBlockRange editor-utils editor (clj->js options))]
+     (when-let [range (.getCursorInBlockRange editor-utils editor #js {:topLevel top-level})]
        (flash-highlight-range editor range)
-       (let [text (-> editor (.getTextInBufferRange range) str/trim)
-             options (assoc options :displayCode text
-                                    :inlineOptions {:editor editor
-                                                    :range range})]
-         (execute-code-in-ns text options))))))
+       (r/eval-and-display @repl
+                           {:code (-> editor (.getTextInBufferRange range) str/trim)
+                            :ns (.findNsDeclaration editor-utils editor)
+                            :editor editor
+                            :range range})))))
 
 
 (defn execute-selected-text "Executes the selected code."
   ([] (execute-selected-text {}))
   ([options]
    (when-let [editor (get-active-text-editor)]
-     (let [text (or (not-empty (.getSelectedText editor))
-                    (get-var-under-cursor editor))
-           range (.getSelectedBufferRange editor)]
+     (let [range (.getSelectedBufferRange editor)]
        (when (lodash.isEqual range.start range.end)
          (set! range.end.column ##Inf))
-       (execute-code-in-ns text (merge options
-                                       {:inlineOptions {:editor editor
-                                                        :range range}
-                                        :displaycode text
-                                        :doBlock true}))))))
+       (r/eval-and-display @repl
+                           {:code (or (not-empty (.getSelectedText editor))
+                                      (get-var-under-cursor editor))
+                            :ns (.findNsDeclaration editor-utils editor)
+                            :editor editor
+                            :range range})))))
 
 
 (defn- execute-ranges [editor ranges]

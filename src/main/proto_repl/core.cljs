@@ -170,10 +170,10 @@
           (clj->js
             {"proto-repl:autoeval-file" #(c/autoeval-file)
              "proto-repl:clear-repl" #(c/clear-repl)
-             "proto-repl:execute-block" #(c/execute-block)
+             "proto-repl:execute-block" #(c/execute-block {:top-level false})
              "proto-repl:execute-selected-text" #(c/execute-selected-text)
              "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
-             "proto-repl:execute-top-block" #(c/execute-block {:topLevel true})
+             "proto-repl:execute-top-block" #(c/execute-block {:top-level true})
              "proto-repl:exit-repl" #(c/exit-repl)
              "proto-repl:interrupt" #(c/interrupt)
              "proto-repl:list-ns-vars-with-docs" #(c/list-ns-vars-with-docs)

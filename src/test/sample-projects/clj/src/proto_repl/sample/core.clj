@@ -11,8 +11,18 @@
 
 ; FIXME cursor should stay in current editor window after first evaluation
 
+; FIXME:
+; - click in the non-button area of the REPL window toolbar
+; - evaluate something in this file
+; - cursor shoudld stay in this file
+
 ; run command on each character of expression
 (+ 1 1)
+
+; Make sure *e shows last exception.
+(comment
+  (.qwer 5)
+  (do *e))
 
 ; FIXME should work on bare symbols, keywords, numbers, strings
 map
@@ -220,29 +230,25 @@ map
 (comment
   (range 100))
 
-
 ; See test.clj for these commands
 ;   run-all-tests
 ;   run-test-under-cursor
 ;   run-tests-in-namespace
 
+
 (comment
-  (require '[clojure.pprint :refer [pprint]])
+  ; make sure stdout, stderr, and return value are handled correctly
+  (do
+    (println "stdout")
+    (binding [*out* *err*]
+      (println "stderr"))
+    "return value")
 
-  (println "wqerq")
-  (.println System/out "qwer")
-  (.start (java.lang.Thread. #(println "asdf-----")))
+  ; check exception formatting
+  ; make sure file and line number are correct
+  (.qwer 45))
 
-  (dotimes [_ 10]
-    (java.lang.Thread/sleep 1000)
-    (println "asdf"))
 
-  (pprint ())
-
-  (macroexpand-1 '
-   (ns proto-repl.sample.core
-     (:require [proto-repl.sample.other :as other]
-               ;delete later
-               [clojure.pprint :refer [pprint]])))
-
-  (in-ns (quote proto-repl.sample.core)))
+(comment
+  (.pid (java.lang.ProceissHandle/current))
+  (println "qwer"))

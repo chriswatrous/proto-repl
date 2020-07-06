@@ -143,10 +143,11 @@ You can disable this help text in the settings.")
         (when ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
         (when ns
           (if (:namespace-not-found status)
-            (rv/stderr view (str "Namespace " ns " not found.\n\n"
-                                 "Try loading the current file. ( "
-                                 (str/join "  |  " (get-keybindings :load-current-file))
-                                 " )"))
+            (rv/stderr view (str "Namespace not found: " ns "\n\n"
+                                 "Try loading the current file.  "
+                                 (->> (get-keybindings :load-current-file)
+                                      (map #(str "(" % ")"))
+                                      (str/join "  or  "))))
             (reset! current-ns ns))
           (display-current-ns this))))))
 
@@ -235,35 +236,30 @@ You can disable this help text in the settings.")
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (rv/stderr view "already connected")
-      (do
+      (go-try-log
         (reset! connection (connect-to-nrepl
                              {:host host
                               :port port
                               :on-message #(handle-connection-message this %)
                               :on-start #(handle-repl-started this)
                               :on-stop #(handle-repl-stopped this)}))
-        (go-try-log
-          (let [c (make-nrepl-client {:host host :port port})
-                m (<! (:status-chan c))]
-            (cond
-              (:error m) (rv/stderr view (str (:error m)))
-              (not (:ready m)) (rv/stderr view (str "Unknown status-chan message: " m))
-              :else
-              (do
-                (reset! new-connection c)
-                (rv/info view (str "Connected to " host ":" port "\n"))
-                (dochan! [m (nrepl-request c {:op "describe"})]
-                  (when-let [{:keys [clojure java nrepl]} (:versions m)]
-                    (rv/info view (str "• Clojure " (:version-string clojure) "\n"
-                                       "• Java " (:version-string java) "\n"
-                                       "• nREPL " (:version-string nrepl) "\n"
-                                       "• pid " (<! (get-connected-pid this)) "\n"))))
-                (display-current-ns this)
-                (dochan! [m (:status-chan c)]
-                  (if (:error m)
-                    (rv/stderr view (str (:error m)))
-                    (rv/stderr view (str "Unknown status-chan message: " m))))))
-            (reset! new-connection nil))))))
+        (let [c (<! (make-nrepl-client {:host host :port port}))]
+          (if-let [err (ex-message c)]
+            (rv/stderr view err)
+            (do
+              (reset! new-connection c)
+              (rv/info view (str "Connected to " host ":" port "\n"))
+              (dochan! [m (nrepl-request c {:op "describe"})]
+                (when-let [{:keys [clojure java nrepl]} (:versions m)]
+                  (rv/info view (str "• Clojure " (:version-string clojure) "\n"
+                                     "• Java " (:version-string java) "\n"
+                                     "• nREPL " (:version-string nrepl) "\n"
+                                     "• pid " (<! (get-connected-pid this)) "\n"))))
+              (display-current-ns this)
+              (if-let [err (<! (:error-chan c))]
+                (rv/stderr view (str err))
+                (rv/stderr view "nREPL connection was closed"))))
+          (reset! new-connection nil)))))
 
   (doc [_ text] (rv/doc view text))
   (info [_ text] (rv/info view text))

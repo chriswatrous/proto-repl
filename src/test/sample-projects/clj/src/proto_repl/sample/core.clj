@@ -1,6 +1,16 @@
 (ns proto-repl.sample.core
   (:require [proto-repl.sample.other :as other]))
 
+; remote-nrepl-connection (cmd-alt-y) --------------------------------------------------------------
+
+; try to connect to invalid port
+; connect to remote repl
+; make sure tab works in the connection window
+; FIXME try with badly formatted port or out of range
+; FIXME doesn't work if window is already open
+; TODO Maybe don't allow connection to be attempted with no port?
+
+
 ; clear-repl (cmd-shift-k) -------------------------------------------------------------------------
 
 ; execute expression then clear the REPL
@@ -212,16 +222,6 @@ map
 ; FIXME It says "Refresh complete" but it doesn't do anything.
 (comment
   (do other/x))
-
-
-; remote-nrepl-connection (cmd-alt-y) --------------------------------------------------------------
-
-; connect to remote repl
-; make sure tab works in the connection window
-; FIXME doesn't work if window is already open
-; TODO would be nice if it printed a message when the connection is lost, maybe even try to
-;      reconnect
-; TODO Maybe don't allow connection to be attempted with no port?
 
 
 ; toggle-auto-scroll (cmd-alt-shift-s) -------------------------------------------------------------

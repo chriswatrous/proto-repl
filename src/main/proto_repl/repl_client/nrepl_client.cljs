@@ -5,7 +5,8 @@
                                     *print-miser-width*
                                     *print-right-margin*]]
             [clojure.core.async :as async
-                                :refer [chan buffer put! close!]]
+                                :refer [chan buffer put! close!]
+                                :refer-macros [go]]
             [proto-repl.utils :refer [wrap-reducer-try-log]]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
 
@@ -17,26 +18,20 @@
 (comment
   (nrepl-close client)
 
-  (do
-    (def client (wrap-nrepl-client (nrepl-connect {:host "localhost" :port 2345})))
-    (go-try-log
-      (dochan! [status (:status-chan client)]
-        (println "nREPL client status:" status))
-      (println "status-chan closed")))
+  (go-try-log
+    ; (def client (<! (make-nrepl-client {:host "localhost" :port 2345})))
+    (def client (<! (make-nrepl-client {:host "localhost" :port 1111}))))
 
   (go-try-log
     (dochan! [m (nrepl-request client {:op "eval" :code (str '(println "qwer")
                                                              '(println "qwer"))})]))
 
   (go-try-log
-    (dochan! [m (nrepl-request client {:op "eval"
-                                       :code '(binding [*out* *err*]
-                                                (println "Qwer"))})]))
+    (dochan! [m (nrepl-request client {:op "eval" :code (str '(+ 1 1))})]))
 
   (go-try-log
     (dochan! [m (nrepl-request client {:op "eval"
-                                       :code (str '(println "Qwer"))})]
-      (println "response message" m)))
+                                       :code (str '(println "Qwer"))})]))
 
   (def session "747ab495-e85a-4c5f-baac-a85dc82baa71")
 
@@ -47,7 +42,6 @@
   (nrepl-send client {:op "interrupt" :session "" :interrupt-id "12345"})
   (nrepl-send client {:op "eval"
                       :id "12345"
-                      :session session
                       :code (str '(dotimes [_ 5]
                                     (Thread/sleep 1000)
                                     (println "asdf")))}))
@@ -116,22 +110,27 @@
 (defn nrepl-connect "Open an nREPL connection." [{:keys [host port]}]
   (let [message-chan (chan (buffer 1) (comp bencode-buffers->clj
                                             (map status-to-keyword-set)))
-        status-chan (chan)
-        close-chans #(run! close! [message-chan status-chan])
+        client-chan (chan)
+        error-chan (chan)
+        close-chans #(run! close! [message-chan error-chan client-chan])
         socket (net.createConnection #js {:host host :port port})]
      (doto socket
-       (.on "close" (fn [] (put! status-chan {:error "nREPL connection was closed"})
-                           (close-chans)))
+       (.on "close" close-chans)
        (.on "data" #(put! message-chan %))
-       (.on "error" (fn [err] (put! status-chan {:error err})
-                              (close-chans)
-                              (js/console.error "nREPL connection error" err)))
-       (.on "ready" (fn [] (put! status-chan {:ready true}))))
-    {:host host
-     :port port
-     :status-chan status-chan
-     :message-chan message-chan
-     :socket socket}))
+       (.on "error" (fn [err]
+                      (let [err (if (ex-message err) err (js/Error. err))]
+                        (js/console.error "nREPL connection error" err)
+                        (put! client-chan err)
+                        (put! error-chan err))
+                      (close-chans)))
+       (.on "ready" (fn []
+                      (put! client-chan {:host host
+                                         :port port
+                                         :error-chan error-chan
+                                         :message-chan message-chan
+                                         :socket socket})
+                      (close! client-chan))))
+    client-chan))
 
 (defn- print-message [direction message]
   (binding [*print-miser-width* 120
@@ -141,14 +140,11 @@
                                                      (repeat (inc (count direction)) " ")))
                            str/trim))))
 
-(defn wrap-nrepl-client [connection]
-  (let [pending-chans (atom {})
-        client (-> connection
-                   (assoc :pending-chans pending-chans)
-                   (dissoc :message-chan))]
+(defn wrap-request-response [{:keys [message-chan] :as client}]
+  (let [pending-chans (atom {})]
     (go-try-log
       (loop []
-        (when-let [message (<! (:message-chan connection))]
+        (when-let [message (<! message-chan)]
           (print-message "<-" message)
           (if-let [c (@pending-chans (:id message))]
             (do (put! c message)
@@ -158,14 +154,15 @@
             (js/console.error (str "no pending request for id \"" (:id message) "\"")))
           (recur)))
       (println "message-chan closed"))
-    client))
+    (-> client
+        (dissoc :message-chan)
+        (assoc :pending-chans pending-chans))))
 
-(defn make-nrepl-client [options] (wrap-nrepl-client (nrepl-connect options)))
-
-(defn nrepl-send "Send an nREPL message." [connection message]
-  (println "-------------------------")
-  (print-message "->" message)
-  (.write (:socket connection) (clj->bencode message) "binary"))
+(defn nrepl-send "Send an nREPL message." [{:keys [socket session-id]} message]
+  (let [message (assoc message :session session-id)]
+    (println "-------------------------")
+    (print-message "->" message)
+    (.write socket (clj->bencode message) "binary")))
 
 (defn nrepl-request
   "Send a request to an nREPL connection. Returns a channel that will
@@ -177,9 +174,28 @@
     (nrepl-send client (assoc message :id id))
     c))
 
+(defn wrap-create-session [client]
+  (go-try-log
+    (assoc client :session-id
+           (<! (async/reduce (fn [result {:keys [new-session]}] (or new-session result))
+                             nil
+                             (nrepl-request client {:op "clone"}))))))
+
+(defn make-nrepl-client [options]
+  (go
+    (try
+      (let [client (<! (nrepl-connect options))]
+        (if (ex-message client)
+          client
+          (-> client
+              wrap-request-response
+              wrap-create-session
+              <!)))
+      (catch :default err err))))
+
 (defn nrepl-close "Close an nREPL connection or client." [client]
   ; Close channels first to make sure an error doesn't get reported.
-  (->> (concat (map client [:status-chan :message-chan])
+  (->> (concat (map client [:error-chan :message-chan])
                (some-> client :pending-chans deref vals))
        (remove nil?)
        (run! close!))
@@ -212,6 +228,7 @@
   (collect-eval-result (nrepl-request client (-> options
                                                  (assoc :op "eval")
                                                  (update :code str)))))
+
 
 ; TODO make unit tests out of these
 (comment

@@ -8,7 +8,7 @@
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
             [proto-repl.views.nrepl-connection-view :as cv]
-            [proto-repl.utils :refer [template-replace]]))
+            [proto-repl.utils :refer [get-config template-replace]]))
 
 
 (def ^:private lodash (js/require "lodash"))
@@ -114,7 +114,7 @@
 
 (defn autoeval-file "Turn on auto evaluation of the current file." []
   (let [editor (get-active-text-editor)]
-    (cond (not (js/atom.config.get "proto-repl.showInlineResults"))
+    (cond (not (get-config :show-inline-results))
           (stderr "Auto Evaling is not supported unless inline results is enabled")
           editor
           (if editor.protoReplAutoEvalDisposable
@@ -274,7 +274,7 @@
 (defn run-tests-in-namespace []
   (when-let [editor (get-active-text-editor)]
     (let [run #(execute-code-in-ns '(clojure.test/run-tests))]
-      (if (js/atom.config.get "proto-repl.refreshBeforeRunningTestFile")
+      (if (get-config :refresh-before-running-test-file)
         (refresh-namespaces run)
         (run)))))
 

@@ -247,8 +247,3 @@ map
   ; check exception formatting
   ; make sure file and line number are correct
   (.qwer 45))
-
-
-(comment
-  (.pid (java.lang.ProceissHandle/current))
-  (println "qwer"))

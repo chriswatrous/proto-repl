@@ -82,7 +82,7 @@ You can disable this help text in the settings.")
       err (stderr this err)
       value (do (info this (str (rc/get-current-ns @(:connection this)) "=>"))
                 (-> this :view
-                    (rv/result (if (js/atom.config.get "proto-repl.autoPrettyPrint")
+                    (rv/result (if (get-config :auto-pretty-print)
                                  (pretty-edn value) value)))))))
 
 (defn- build-tree-view [[head button-options & children]]
@@ -122,6 +122,34 @@ You can disable this help text in the settings.")
                                 {:code '(.pid (java.lang.ProcessHandle/current))})))
         "unknown")))
 
+(defn- eval-and-display* [{:keys [new-connection view current-ns] :as this}
+                          {:keys [code ns editor range]}]
+  (go-try-log
+    (when (get-config :display-executed-code-in-repl)
+      (rv/display-executed-code view code))
+    (dochan! [m (nrepl-request @new-connection
+                               (merge {:op "eval"
+                                       :code code
+                                       :ns (or ns @current-ns)}
+                                      (when editor
+                                        {:file (.getPath editor)})
+                                      (when range
+                                        {:line (-> range .-start .-row inc)
+                                         :column (-> range .-start .-column inc)})))]
+      (let [{:keys [out err ns value status ex]} m]
+        (some->> out (rv/stdout view))
+        (some->> err (rv/stderr view))
+        (some->> value pretty-edn (rv/result view))
+        (when ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
+        (when ns
+          (if (:namespace-not-found status)
+            (rv/stderr view (str "Namespace " ns " not found.\n\n"
+                                 "Try loading the current file. ( "
+                                 (str/join "  |  " (get-keybindings :load-current-file))
+                                 " )"))
+            (reset! current-ns ns))
+          (display-current-ns this))))))
+
 (defrecord ^:private ReplImpl [emitter current-ns spinner extensions-feature connection
                                new-connection view]
   Repl
@@ -143,7 +171,7 @@ You can disable this help text in the settings.")
                              :as options}]
     (when (running? this)
       (when (or alwaysDisplay
-                (and displayCode (js/atom.config.get "proto-repl.displayExecutedCodeInRepl")))
+                (and displayCode (get-config :display-executed-code-in-repl)))
         (rv/display-executed-code view displayCode))
       (let [spinid (when inlineOptions (.startAt spinner
                                                  (:editor inlineOptions)
@@ -157,27 +185,8 @@ You can disable this help text in the settings.")
                 (resultHandler result)
                 (inline-result-handler this result options))))))))
 
-  (eval-and-display [this {:keys [code ns editor range]}]
-    (go-try-log
-      ; (when (get-config :display-executed-code-in-repl)
-      (when (js/atom.config.get "proto-repl.displayExecutedCodeInRepl")
-        (rv/display-executed-code view code))
-      (dochan! [m (nrepl-request @new-connection {:op "eval"
-                                                  :code code
-                                                  :ns (or ns @current-ns)})]
-        (let [{:keys [out err ns value status ex]} m]
-          (some->> out (rv/stdout view))
-          (some->> err (rv/stderr view))
-          (some->> value pretty-edn (rv/result view))
-          (when ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
-          (when ns
-            (if (:namespace-not-found status)
-              (rv/stderr view (str "Namespace " ns " not found.\n"
-                                   "Try loading the current file. ( "
-                                   (str/join "  |  " (get-keybindings :load-current-file))
-                                   " )"))
-              (reset! current-ns ns))
-            (display-current-ns this))))))
+  (eval-and-display [this options]
+    (eval-and-display* this options))
 
   (execute-entered-text [this]
     (when (running? this)
@@ -195,7 +204,7 @@ You can disable this help text in the settings.")
   (get-type [_] (rc/get-type @connection))
 
   (inline-result-handler [this result {:keys [inlineOptions]}]
-    (when (and inlineOptions (js/atom.config.get "proto-repl.showInlineResults"))
+    (when (and inlineOptions (get-config :show-inline-results))
       ((make-inline-handler this (:editor inlineOptions) (:range inlineOptions)
                             #(js->clj (edn->display-tree %)))
        result)))
@@ -249,8 +258,6 @@ You can disable this help text in the settings.")
                                        "• Java " (:version-string java) "\n"
                                        "• nREPL " (:version-string nrepl) "\n"
                                        "• pid " (<! (get-connected-pid this)) "\n"))))
-                ; (when-let [pid (<! (get-connected-pid this))]
-                ;     (rv/info view (str "• pid " pid "\n")))
                 (display-current-ns this)
                 (dochan! [m (:status-chan c)]
                   (if (:error m)
@@ -276,7 +283,7 @@ You can disable this help text in the settings.")
                              :connection connection
                              :new-connection new-connection
                              :view view})]
-    (when (js/atom.config.get "proto-repl.displayHelpText")
+    (when (get-config :display-help-text)
       (info repl repl-help-text))
     (rv/on-did-close view
       ; FIXME exception in close handler causes REPL to not be able to start again.

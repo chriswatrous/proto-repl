@@ -136,11 +136,6 @@
                        :callback "proto-repl:run-all-tests"
                        :tooltip "Run All Tests"})
       (.addSpacer)
-      (.addButton #js {:icon "paypal"
-                       :iconset "fa"
-                       :callback "proto-repl:pretty-print"
-                       :tooltip "Pretty Print"})
-      (.addSpacer)
       (.addButton #js {:icon "code-download"
                        :iconset "ion"
                        :callback "proto-repl:toggle-auto-scroll"
@@ -168,8 +163,7 @@
           js/atom.commands
           "atom-workspace"
           (clj->js
-            {"proto-repl:autoeval-file" #(c/autoeval-file)
-             "proto-repl:clear-repl" #(c/clear-repl)
+            {"proto-repl:clear-repl" #(c/clear-repl)
              "proto-repl:execute-block" #(c/execute-block {:top-level false})
              "proto-repl:execute-selected-text" #(c/execute-selected-text)
              "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
@@ -180,7 +174,6 @@
              "proto-repl:list-ns-vars" #(c/list-ns-vars)
              "proto-repl:load-current-file" #(c/load-current-file)
              "proto-repl:open-file-containing-var" #(c/open-file-containing-var)
-             "proto-repl:pretty-print" #(c/pretty-print)
              "proto-repl:print-var-code" #(c/print-var-code)
              "proto-repl:print-var-documentation" #(c/print-var-documentation)
              "proto-repl:refresh-namespaces" #(c/refresh-namespaces)
@@ -189,7 +182,6 @@
              "proto-repl:run-all-tests" #(c/run-all-tests)
              "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
              "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
-             "proto-repl:stop-autoeval-file" #(c/stop-autoeval-file)
              "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
              "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)}))))
 
@@ -219,7 +211,7 @@
        :registerCodeExecutionExtension c/register-code-execution-extension
        :getClojureVarUnderCursor c/get-var-under-cursor
        :executeCode #(c/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
-       :executeCodeInNs #(c/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
+       ; :executeCodeInNs #(c/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
        :isSelfHosted (fn [] false)
 
        ; Utility functions

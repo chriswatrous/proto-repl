@@ -13,10 +13,7 @@
             [proto-repl.repl-client.core :as rc]
             [proto-repl.repl-client.nrepl :refer [connect-to-nrepl]]
             [proto-repl.repl-client.process :refer [start-repl-process]]
-            [proto-repl.repl-client.nrepl-client :refer [make-nrepl-client
-                                                         nrepl-close
-                                                         nrepl-eval
-                                                         nrepl-request]]
+            [proto-repl.repl-client.nrepl-client :as nrepl]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
 
 (def ^:private TreeView (js/require "../lib/tree-view"))
@@ -118,38 +115,41 @@ You can disable this help text in the settings.")
 
 (defn- get-connected-pid [{:keys [new-connection]}]
   (go-try-log
-    (or (:value (<! (nrepl-eval @new-connection
-                                {:code '(.pid (java.lang.ProcessHandle/current))})))
-        "unknown")))
+    (-> (nrepl/eval @new-connection {:code '(.pid (java.lang.ProcessHandle/current))})
+        <! :value (or "unknown"))))
 
-(defn- eval-and-display* [{:keys [new-connection view current-ns] :as this}
+(defn- display-ns-message [{:keys [view current-ns] :as this} ns status]
+    (if (:namespace-not-found status)
+      (rv/stderr view (str "Namespace not found: " ns "\n\n"
+                           "Try loading the current file.  "
+                           (->> (get-keybindings :load-current-file)
+                                (map #(str "(" % ")"))
+                                (str/join "  or  "))))
+      (reset! current-ns ns))
+    (display-current-ns this))
+
+(defn- display-nrepl-message [{:keys [view current-ns] :as this}
+                              {:keys [out err ns value status ex]}]
+  (cond
+    out (rv/stdout view out)
+    err (rv/stderr view err)
+    value (rv/result view (pretty-edn value))
+    ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
+  (when ns (display-ns-message this ns status)))
+
+(defn- eval-and-display* [{:keys [new-connection view current-ns spinner] :as this}
                           {:keys [code ns editor range]}]
   (go-try-log
     (when (get-config :display-executed-code-in-repl)
       (rv/display-executed-code view code))
-    (dochan! [m (nrepl-request @new-connection
-                               (merge {:op "eval"
-                                       :code code
-                                       :ns (or ns @current-ns)}
-                                      (when editor
-                                        {:file (.getPath editor)})
-                                      (when range
-                                        {:line (-> range .-start .-row inc)
-                                         :column (-> range .-start .-column inc)})))]
-      (let [{:keys [out err ns value status ex]} m]
-        (some->> out (rv/stdout view))
-        (some->> err (rv/stderr view))
-        (some->> value pretty-edn (rv/result view))
-        (when ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
-        (when ns
-          (if (:namespace-not-found status)
-            (rv/stderr view (str "Namespace not found: " ns "\n\n"
-                                 "Try loading the current file.  "
-                                 (->> (get-keybindings :load-current-file)
-                                      (map #(str "(" % ")"))
-                                      (str/join "  or  "))))
-            (reset! current-ns ns))
-          (display-current-ns this))))))
+    (let [spinid (when (and editor range) (.startAt spinner editor range))]
+      (dochan! [m (nrepl/request @new-connection
+                                 (merge {:op "eval" :code code :ns (or ns @current-ns)}
+                                        (when editor {:file (.getPath editor)})
+                                        (when range {:line (-> range .-start .-row inc)
+                                                     :column (-> range .-start .-column inc)})))]
+        (display-nrepl-message this m))
+      (when spinid (.stop spinner editor spinid)))))
 
 (defrecord ^:private ReplImpl [emitter current-ns spinner extensions-feature connection
                                new-connection view]
@@ -199,7 +199,7 @@ You can disable this help text in the settings.")
       (info this "Stopping REPL")
       (rc/stop @connection)
       (reset! connection nil)
-      (nrepl-close @new-connection)
+      (nrepl/close @new-connection)
       (reset! new-connection nil)))
 
   (get-type [_] (rc/get-type @connection))
@@ -211,9 +211,8 @@ You can disable this help text in the settings.")
        result)))
 
   (interrupt [_]
-    (.clearAll spinner)
-    (rc/interrupt @connection)
-    (rv/stderr view "Interrupted."))
+    (nrepl/interrupt @new-connection)
+    (rv/stderr view "Interrupted.\n"))
 
   (make-inline-handler [this editor range value->tree]
     (fn [result]
@@ -243,13 +242,13 @@ You can disable this help text in the settings.")
                               :on-message #(handle-connection-message this %)
                               :on-start #(handle-repl-started this)
                               :on-stop #(handle-repl-stopped this)}))
-        (let [c (<! (make-nrepl-client {:host host :port port}))]
+        (let [c (<! (nrepl/create-client {:host host :port port}))]
           (if-let [err (ex-message c)]
             (rv/stderr view err)
             (do
               (reset! new-connection c)
               (rv/info view (str "Connected to " host ":" port "\n"))
-              (dochan! [m (nrepl-request c {:op "describe"})]
+              (dochan! [m (nrepl/request c {:op "describe"})]
                 (when-let [{:keys [clojure java nrepl]} (:versions m)]
                   (rv/info view (str "• Clojure " (:version-string clojure) "\n"
                                      "• Java " (:version-string java) "\n"
@@ -284,7 +283,7 @@ You can disable this help text in the settings.")
     (rv/on-did-close view
       ; FIXME exception in close handler causes REPL to not be able to start again.
       (fn [] (try (some-> @connection rc/stop)
-                  (some-> @new-connection nrepl-close)
+                  (some-> @new-connection nrepl/close)
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))
     repl))

@@ -7,7 +7,11 @@
     `(fn ~other-params
        (cljs.core/this-as ~this-sym ~@body))))
 
-(defmacro go-try-log [& body]
+(defmacro go-try-log
+  "Go block that catches and logs errors.
+  This is to prevent the editor from crashing with
+  \"DevTools was disconnected from the page.\""
+  [& body]
   `(cljs.core.async/go (try ~@body (catch :default err# (js/console.error err#)))))
 
 (defmacro dochan!
@@ -20,3 +24,21 @@
        (when-let [~(first binding) (cljs.core.async/<! c#)]
          ~@body
          (recur)))))
+
+(defmacro when-let+
+  "Multiple bindings version of whenn-let taken from
+  https://clojuredocs.org/clojure.core/when-let
+  and improved slightly"
+  [bindings & body]
+  (if (seq bindings)
+    `(when-let ~(vec (take 2 bindings))
+       (when-let+ ~(vec (drop 2 bindings)) ~@body))
+    `(do ~@body)))
+
+(defmacro template-fill
+  "Wrap body in (do ...), convert to string, and string replace placeholders"
+  [placeholders & body]
+  `(reduce (fn [result# [placeholder# value#]]
+             (clojure.string/replace result# placeholder# value#))
+           ~(str (apply list 'do body))
+           ~(mapv (fn [p] [(name p) p]) placeholders)))

@@ -2,7 +2,8 @@
   (:require [cljs.reader :as r]
             [clojure.edn :as edn]
             [fipp.edn :as fipp]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.core.async :as async]))
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
@@ -67,24 +68,6 @@
 (defn empty->nil [o]
   (if (empty? o) nil o))
 
-(defn template-replace
-  "Perform replacements on a template.
-
-  template - anything that can be converted to string (such as a quoted Clojure expression)
-  replacements - map of replacements
-
-  The placeholders should be sorrounded by double dashes like this:
-    --some-thing--
-    --other-thing--
-
-  The replacement map would look like:
-    {:some-thing \"the value\"}
-     :other-thing \"another value\"}"
-  [template replacements]
-  (reduce (fn [out [k v]] (str/replace out (str "--" (name k) "--") v))
-          (str template)
-          replacements))
-
 (defn get-config "Get a value from the package config." [key]
   (js/atom.config.get (str "proto-repl." (lodash.camelCase (name key)))))
 
@@ -92,7 +75,11 @@
   (->> (.findKeyBindings js/atom.keymaps #js {:command (str "proto-repl:" (name command-key))})
        (mapv #(.-keystrokes %))))
 
-(defn wrap-reducer-try-log [rf]
+(defn wrap-reducer-try-log
+  "A transducer that catches and logs errors in the reducer function.
+  This is to prevent the editor from crashing with
+  \"DevTools was disconnected from the page.\""
+  [rf]
   (fn ([] (try (rf)
                (catch :default err (js/console.error err))))
       ([result] (try (rf result)
@@ -100,3 +87,10 @@
       ([result input] (try (rf result input)
                            (catch :default err (js/console.error err)
                                                (reduced nil))))))
+
+(defn safe-async-transduce
+  "Like clojure.core.async/transduce but catches and logs exceptions in xform or f.
+  This is to prevent the editor from crashing with
+  \"DevTools was disconnected from the page.\""
+  [xform f init ch]
+  (async/transduce (comp wrap-reducer-try-log xform) f init ch))

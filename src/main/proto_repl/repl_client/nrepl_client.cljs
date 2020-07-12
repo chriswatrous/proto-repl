@@ -1,4 +1,5 @@
 (ns proto-repl.repl-client.nrepl-client
+  (:refer-clojure :exclude [eval])
   (:require [clojure.string :as str]
             [clojure.walk :refer [prewalk]]
             [clojure.pprint :refer [pprint
@@ -7,7 +8,8 @@
             [clojure.core.async :as async
                                 :refer [chan buffer put! close!]
                                 :refer-macros [go]]
-            [proto-repl.utils :refer [wrap-reducer-try-log]]
+            [proto-repl.utils :refer [safe-async-transduce
+                                      wrap-reducer-try-log]]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
 
 (def ^:private bencode (js/require "bencode"))
@@ -35,16 +37,16 @@
 
   (def session "747ab495-e85a-4c5f-baac-a85dc82baa71")
 
-  (nrepl-send client {:op "ls-sessions"})
-  (nrepl-send client {:op "clone"})
-  (nrepl-send client {:op "close" :session "183e4504-68b6-40cc-9d3e-bc37fb6c3da8"})
-  (nrepl-send client {:op "describe"})
-  (nrepl-send client {:op "interrupt" :session "" :interrupt-id "12345"})
-  (nrepl-send client {:op "eval"
-                      :id "12345"
-                      :code (str '(dotimes [_ 5]
-                                    (Thread/sleep 1000)
-                                    (println "asdf")))}))
+  (send client {:op "ls-sessions"})
+  (send client {:op "clone"})
+  (send client {:op "close" :session "183e4504-68b6-40cc-9d3e-bc37fb6c3da8"})
+  (send client {:op "describe"})
+  (send client {:op "interrupt" :session "" :interrupt-id "12345"})
+  (send client {:op "eval"
+                :id "12345"
+                :code (str '(dotimes [_ 5]
+                              (Thread/sleep 1000)
+                              (println "asdf")))}))
 
 (defn- bencode-response->clj [data]
   "Convert bencode.decode response to cljs with keyword keys.
@@ -107,7 +109,7 @@
     (update message :status #(set (map keyword %)))
     message))
 
-(defn nrepl-connect "Open an nREPL connection." [{:keys [host port]}]
+(defn- nrepl-connect "Open an nREPL connection." [{:keys [host port]}]
   (let [message-chan (chan (buffer 1) (comp bencode-buffers->clj
                                             (map status-to-keyword-set)))
         client-chan (chan)
@@ -140,7 +142,7 @@
                                                      (repeat (inc (count direction)) " ")))
                            str/trim))))
 
-(defn wrap-request-response [{:keys [message-chan] :as client}]
+(defn- wrap-request-response [{:keys [message-chan] :as client}]
   (let [pending-chans (atom {})]
     (go-try-log
       (loop []
@@ -158,30 +160,33 @@
         (dissoc :message-chan)
         (assoc :pending-chans pending-chans))))
 
-(defn nrepl-send "Send an nREPL message." [{:keys [socket session-id]} message]
-  (let [message (assoc message :session session-id)]
+(defn- send "Send an nREPL message." [{:keys [socket session-id]} message]
+
+  (let [message (-> message
+                    (assoc :session session-id)
+                    (as-> % (if (:code %) (update % :code str) %)))]
     (println "-------------------------")
     (print-message "->" message)
     (.write socket (clj->bencode message) "binary")))
 
-(defn nrepl-request
+(defn request
   "Send a request to an nREPL connection. Returns a channel that will
   convey any response messages associated with this request as they arrive."
   [client message]
   (let [id (str (random-uuid))
         c (chan)]
     (swap! (:pending-chans client) assoc id c)
-    (nrepl-send client (assoc message :id id))
+    (send client (assoc message :id id))
     c))
 
-(defn wrap-create-session [client]
+(defn- wrap-create-session [client]
   (go-try-log
     (assoc client :session-id
            (<! (async/reduce (fn [result {:keys [new-session]}] (or new-session result))
                              nil
-                             (nrepl-request client {:op "clone"}))))))
+                             (request client {:op "clone"}))))))
 
-(defn make-nrepl-client [options]
+(defn create-client [options]
   (go
     (try
       (let [client (<! (nrepl-connect options))]
@@ -193,7 +198,7 @@
               <!)))
       (catch :default err err))))
 
-(defn nrepl-close "Close an nREPL connection or client." [client]
+(defn close "Close an nREPL connection or client." [client]
   ; Close channels first to make sure an error doesn't get reported.
   (->> (concat (map client [:error-chan :message-chan])
                (some-> client :pending-chans deref vals))
@@ -201,10 +206,9 @@
        (run! close!))
   (.destroy (:socket client)))
 
-(defn collect-eval-result [messages-chan]
-  (async/transduce
-    (comp wrap-reducer-try-log
-          cat)
+(defn- collect-eval-result [messages-chan]
+  (safe-async-transduce
+    cat
     (fn [result [k v]]
       (if (nil? v)
         result
@@ -224,10 +228,13 @@
      :status #{}}
     messages-chan))
 
-(defn nrepl-eval [client options]
-  (collect-eval-result (nrepl-request client (-> options
-                                                 (assoc :op "eval")
-                                                 (update :code str)))))
+(defn eval [client options]
+  (collect-eval-result (request client (-> options (assoc :op "eval") (update :code str)))))
+
+(defn interrupt [{:keys [pending-chans session-id] :as client}]
+  (doseq [id (keys @pending-chans)]
+    (close! (request client {:op "interrupt" :interrupt-id id}))))
+
 
 
 ; TODO make unit tests out of these

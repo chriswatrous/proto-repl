@@ -1,5 +1,8 @@
 (ns proto-repl.sample.core
-  (:require [proto-repl.sample.other :as other]))
+  (:require [clojure.walk :refer [prewalk]]
+            [proto-repl.sample.other :as other]))
+
+; TODO / FIXME Try all commands while not connected.
 
 ; remote-nrepl-connection (cmd-alt-y) --------------------------------------------------------------
 
@@ -55,7 +58,7 @@ map
 '(1 2 3) ; FIXME
 `(1 2 3 ~map) ; FIXME
 
-; FIXME should work on shorthand functions
+; FIXME should work on s horthand functions
 #(+ 5 %)
 
 ; Run on whole comment block. Then test each expression inside block.
@@ -123,25 +126,40 @@ map
 ; interrupt (ctrl-shift-c) -------------------------------------------------------------------------
 
 ; TODO Maybe have this command only do something if an evaluation is waiting?
+; TODO show namespace after interrupting
 
 ; execute these and interrupt before the first one returns
 (comment
   (Thread/sleep 60000)
+  (Thread/sleep 1000)
   (+ 1 1))
 
 
 ; list-ns-vars (alt-cmd-n or ctrl-, n) -------------------------------------------------------------
+; list-ns-vars-with-docs (cmd-alt-shift-n) ---------------------------------------------------------
 
-; FIXME doesn't work
 ; FIXME key bindings get screwed up after cmd-alt-n:
 ; - ctrl key shows keyboard help but backtick key fixes
 ; - doesn't happen with ctrl-, n
-(comment clojure.string)
 
+(comment
+  ; fully qualified
+  clojure.string
 
-; list-ns-vars-with-docs (cmd-alt-shift-n) ---------------------------------------------------------
+  ; alias
+  other
 
-(comment clojure.set)
+  ; unknown
+  qwerasdf
+
+  ; TODO use namespace part of symbol
+  clojure.string/join
+
+  ; TODO handle namespace alias
+  other/g
+
+  ; TODO get namespace for referred var
+  prewalk)
 
 
 ; load-current-file (cmd-alt-shift-f) --------------------------------------------------------------
@@ -167,28 +185,16 @@ map
   map ; Clojure standard library
   nrepl.cmdline/-main ; third party library
   clojure.string ; namespace FIXME should go to the beginning of the file
+  qwer ; doesn't exist
 
   ; TODO would be nice if it worked on Java classes or at least print a message saying it doesn't
   ; work on Java classes
-  clojure.lang.PersistentVector
-
-  ; FIXME would be good to have an error message instead of just doing nothing
-  qwer) ; doesn't exist
-
-
-; pretty-print (cmd-alt-p) -------------------------------------------------------------
-
-; TODO Maybe remove this. Values are always pretty printed. This command just pretty prints them
-; in a slightly different format.
-
-; execute expression then cmd-alt-p
-(comment
-  {:aslfdkajsdflkajsdlfkajsdlfkjasd "qwelrjqwlekrjqlkjhqwelrkjqhwelrkjqhwerlkjqwehrlkjqwe"
-   :qwerlkqjwerlkqjwelrkjasdflkjasd "amnzxc,vmnzx,fmvn,asdmfn,amsdnf,amsdn,masdf,nam,nnne"})
+  clojure.lang.PersistentVector)
 
 
 ; print-var-code (cmd-alt-c) -----------------------------------------------------------------------
 
+; TODO print with Clojure syntax highlighting
 (comment map)
 
 ; FIXME doesn't work for this
@@ -238,12 +244,21 @@ map
 
 (comment
   ; make sure stdout, stderr, and return value are handled correctly
+  ; FIXME escape characters so they aren't interpreted as HTML
   (do
-    (println "stdout")
+    (println "stdout <h1>Should not be big.</h1>")
     (binding [*out* *err*]
-      (println "stderr"))
-    "return value")
+      (println "stderr <h1>Should not be big.</h1>"))
+    "return value <h1>Should not be big.</h1>")
 
   ; check exception formatting
   ; make sure file and line number are correct
+  ; FIXME show ns line after error message
   (.qwer 45))
+
+
+; autocomplete -------------------------------------------------------------------------------------
+
+(comment
+  ; retype this below
+  clojure.string/join)

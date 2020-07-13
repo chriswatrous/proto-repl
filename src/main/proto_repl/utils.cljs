@@ -94,3 +94,10 @@
   \"DevTools was disconnected from the page.\""
   [xform f init ch]
   (async/transduce (comp wrap-reducer-try-log xform) f init ch))
+
+(defn safe-async-reduce
+  "Like clojure.core.async/reduce but catches and logs exceptions in xform or f.
+  This is to prevent the editor from crashing with
+  \"DevTools was disconnected from the page.\""
+  [f init ch]
+  (async/transduce wrap-reducer-try-log f init ch))

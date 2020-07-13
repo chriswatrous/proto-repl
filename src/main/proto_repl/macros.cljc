@@ -42,3 +42,15 @@
              (clojure.string/replace result# placeholder# value#))
            ~(str (apply list 'do body))
            ~(mapv (fn [p] [(name p) p]) placeholders)))
+
+(defmacro go-promise
+  "A go block that returns a JavaScript promise. The return value of
+  body will be the resolved value of the promise. Any error thrown in
+  body will reject the promise."
+  [& body]
+  `(js/Promise.
+     (fn [resolve# reject#]
+       (cljs.core.async/go
+         (try
+           (resolve# (do ~@body))
+           (catch :default err# (reject# err#)))))))

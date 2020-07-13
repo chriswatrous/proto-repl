@@ -259,6 +259,13 @@ map
 
 ; autocomplete -------------------------------------------------------------------------------------
 
+; scenarios:
+; - not connected
+; - connected but no proto-repl lib
+; - connected with proto-repl lib, file not loaded
+; - connected with proto-repl lib
+
 (comment
-  ; retype this below
-  clojure.string/join)
+  ; retype these
+  clojure.string/join
+  map)

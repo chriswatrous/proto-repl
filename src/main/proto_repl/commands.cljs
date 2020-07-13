@@ -19,7 +19,10 @@
 
 (defonce ^:private emitter (Emitter.))
 (defonce ^:private extensions-feature (ExtensionsFeature.))
-(defonce ^:private repl (atom nil))
+(defonce ^:private repl (atom nil)
+
+ (defn running? []
+  (some-> repl deref r/running?)))
 
 (defn execute-code
   "Execute the given code string in the REPL. See proto-repl.repl/execute-code for supported
@@ -28,7 +31,7 @@
   ([code options] (some-> @repl (r/execute-code (str code) (or options {})))))
 
 
-(defn get-nrepl-client [] @(:new-connection @repl))
+(defn get-nrepl-client [] (some-> repl deref :new-connection deref))
 
 
 (defn info [text] (some-> @repl (r/info text)))
@@ -42,24 +45,29 @@
            (.findNsDeclaration editor-utils)))
 
 
+(defn nrepl-request [msg]
+  (some-> (get-nrepl-client) (nrepl/request msg)))
+
+
 (defn new-eval-code [options]
-  (when-let [new-connection @(:new-connection @repl)]
-    (safe-async-transduce
-      cat
-      (fn [result [k v]]
-        (case k
-          :out (do (stdout v) result)
-          :err (do (stderr v) result)
-          :value (assoc result :value v)
-          result))
-      {}
-      (nrepl/request new-connection (assoc options :op "eval")))))
+  (some->> (nrepl-request (assoc options :op "eval"))
+           (safe-async-transduce
+             cat
+             (fn [result [k v]]
+               (case k
+                 :out (do (stdout v) result)
+                 :err (do (stderr v) result)
+                 :value (assoc result :value v)
+                 result))
+             {})))
 
 
-(defn get-var-under-cursor [editor]
-  (or (not-empty (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"}))
-      (do (stderr "This command requires you to position the cursor on a Clojure var.")
-          nil)))
+(defn get-var-under-cursor
+  ([] (some-> (get-active-text-editor) get-var-under-cursor))
+  ([editor]
+   (or (not-empty (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"}))
+       (do (stderr "This command requires you to position the cursor on a Clojure var.")
+           nil))))
 
 
 (defn register-code-execution-extension
@@ -248,7 +256,7 @@
 
 (defn run-test-under-cursor []
   (go-try-log
-    (when-let [test-name (some-> (get-active-text-editor) get-var-under-cursor)]
+    (when-let [test-name (get-var-under-cursor)]
       (when (get-config :refresh-before-running-single-test)
         (<! (refresh-namespaces)))
       (<! (r/eval-and-display @repl
@@ -262,16 +270,6 @@
     (<! (r/eval-and-display @repl {:code '(time (clojure.test/run-all-tests))}))))
 
 
-(defn- get-doc-code [var-name]
-  (template-fill [var-name]
-    (require 'clojure.repl)
-    (with-out-str (clojure.repl/doc var-name))))
-
-
-(defn- parse-doc-result [value]
-  (-> value edn/read-string (str/replace #"^-+\n" "")))
-
-
 ; (defn- show-doc-result-inline [result var-name editor]
 ;   (when (js/atom.config.get "proto-repl.showInlineResults"))
 ;   (when true
@@ -282,67 +280,67 @@
 ;       (handler result))))
 
 
-(defn- show-doc-result-in-console [value var-name]
-  (if-let [msg (not-empty (str/trim (parse-doc-result value)))]
-    (doc msg)
-    (stderr (str "No doc found for " var-name))))
-
-
-(defn- show-doc-result [value var-name editor]
-  (show-doc-result-in-console value var-name))
-  ; (show-doc-result-inline value var-name editor))
-
-
-(defn- run-doc-like-command [editor name code]
+(defn- run-doc-like-command [code]
   (go-try-log
-    (-> (new-eval-code {:code code :ns (get-current-ns)})
-        <! :value
-        (show-doc-result name editor))))
+    (let [result (-> (new-eval-code {:code code :ns (get-current-ns)})
+                     <! :value edn/read-string)]
+      (if-let [error (:error result)]
+        (stderr error)
+        (doc result)))))
+
+
+(defn- get-doc-code [var-name]
+  (template-fill [var-name]
+    (require 'clojure.repl
+             'clojure.string)
+    (-> var-name
+        clojure.repl/doc
+        with-out-str
+        (clojure.string/replace #"^-+\n" "")
+        not-empty
+        (or {:error "doc not found: var-name"}))))
 
 
 (defn print-var-documentation []
-  (when-let+ [editor (get-active-text-editor)
-              var-name (get-var-under-cursor editor)]
-    (run-doc-like-command editor var-name (get-doc-code var-name))))
+  (some-> (get-var-under-cursor) get-doc-code run-doc-like-command))
+
+
+(defn get-code-code [var-name]
+  (template-fill [var-name]
+    (require 'clojure.repl)
+    (if-let [v (resolve 'var-name)]
+      (if (instance? java.lang.Class v)
+        {:error "This command doesn't work on Java classes."}
+        (with-out-str (clojure.repl/source var-name)))
+      {:error "var not found: var-name"})))
 
 
 (defn print-var-code []
-  (when-let+ [editor (get-active-text-editor)
-              var-name (get-var-under-cursor editor)]
-    (run-doc-like-command editor var-name (template-fill [var-name]
-                                            (require 'clojure.repl)
-                                            (with-out-str (clojure.repl/source var-name))))))
+  (some-> (get-var-under-cursor) get-code-code run-doc-like-command))
 
 
 (defn- list-ns-vars-code [ns-name]
   (template-fill [ns-name]
     (require 'clojure.repl
              'clojure.string)
-    (let [ns-sym 'ns-name
-          ns (or ((ns-aliases *ns*) ns-sym)
-                 (find-ns ns-sym))]
-      (when-not ns
-        (throw (Exception. (str "Namespace not found: " ns-sym))))
+    (if-let [ns (or ((ns-aliases *ns*) 'ns-name)
+                    (find-ns 'ns-name))]
       (str "Vars in " ns ":\n"
            "------------------------------\n"
-           (clojure.string/join "\n" (clojure.repl/dir-fn ns))))))
+           (clojure.string/join "\n" (clojure.repl/dir-fn ns)))
+      {:error "namespace not found: ns-name"})))
 
 
 (defn list-ns-vars "Lists all the vars in the selected namespace or namespace alias" []
-  (when-let+ [editor (get-active-text-editor)
-              ns-name (get-var-under-cursor editor)]
-    (run-doc-like-command editor ns-name (list-ns-vars-code ns-name))))
+  (some-> (get-var-under-cursor) list-ns-vars-code run-doc-like-command))
 
 
 (defn list-ns-vars-with-docs-code [ns-name]
   (template-fill [ns-name]
     (require 'clojure.repl
              'clojure.string)
-    (let [ns-sym 'ns-name
-          ns (or ((ns-aliases *ns*) ns-sym)
-                 (find-ns ns-sym))]
-      (when-not ns
-        (throw (Exception. (str "Namespace not found: " ns-sym))))
+    (if-let [ns (or ((ns-aliases *ns*) 'ns-name)
+                    (find-ns 'ns-name))]
       (str ns ":\n"
            " " (:doc (meta ns)) "\n"
            (->> (clojure.repl/dir-fn ns)
@@ -357,15 +355,14 @@
                                            (clojure.string/join "\n"))
                                 arglists (pr-str arglists))
                               "\n  " doc))))
-                (clojure.string/join "\n"))))))
+                (clojure.string/join "\n")))
+      {:error "namespace not found: ns-name"})))
 
 
 (defn list-ns-vars-with-docs
   "Lists all the vars with their documentation in the selected namespace or namespace alias"
   []
-  (when-let+ [editor (get-active-text-editor)
-              ns-name (get-var-under-cursor editor)]
-    (run-doc-like-command editor ns-name (list-ns-vars-with-docs-code ns-name))))
+  (some-> (get-var-under-cursor) list-ns-vars-with-docs-code run-doc-like-command))
 
 
 (defn- open-file-containing-var-code [var-name]
@@ -440,7 +437,7 @@
   been decompressed once to avoid doing it multiple times for the same library."
   []
   (go-try-log
-    (when-let+ [var-name (some-> (get-active-text-editor) get-var-under-cursor)
+    (when-let+ [var-name (get-var-under-cursor)
                 value (:value (<! (new-eval-code {:code (open-file-containing-var-code var-name)
                                                   :ns (get-current-ns)})))
                 [file line] (edn/read-string value)

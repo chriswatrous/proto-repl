@@ -57,35 +57,7 @@ getPrefix = (editor, bufferPosition) ->
   line.match(regex)?[0] or ''
 
 module.exports =
-  scopeSelector: '.source.clojure'
-  textEditorSelectors: 'atom-text-editor'
-  disableForScopeSelector: '.source.clojure .comment, .source.clojure .string'
-  inclusionPriority: 100
-  excludeLowerPriority: false
-
-  getTextEditorSelector: -> 'atom-text-editor'
-
-  getSuggestions: ({editor, bufferPosition, scopeDescriptor}) ->
-    prefix = getPrefix(editor, bufferPosition)
-
-    if prefix != ""
-      new Promise (resolve) ->
-        if !window.protoRepl.running()
-          # if we're not running resolve this so other suggestors can be triggered
-          resolve []
-        else if window.protoRepl.isSelfHosted()
-          self_hosted_clj.completions prefix, (matches)->
-            suggestions = (completionToSuggestion(prefix, c) for c in matches)
-            resolve suggestions
-        else
-          code = completionsCode(editor, bufferPosition, prefix)
-          window.protoRepl.executeCode code,
-            displayInRepl: false
-            resultHandler: (result)->
-              if result.error
-                console.log result.error
-                resolve []
-              else
-                completions = window.protoRepl.parseEdn(result.value)
-                suggestions = (completionToSuggestion(prefix, c) for c in completions)
-                resolve suggestions
+  getPrefix: getPrefix
+  completionsCode: completionsCode
+  bufferPositionContext: bufferPositionContext
+  completionToSuggestion: completionToSuggestion

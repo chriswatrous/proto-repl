@@ -4,10 +4,10 @@
             [proto-repl.utils :as u :refer [get-bind]]
             [proto-repl.repl :as r]
             [proto-repl.integration.core]
-            [proto-repl.ink :as ink]))
+            [proto-repl.ink :as ink]
+            [proto-repl.autocomplete :refer [provide-autocomplete]]))
 
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
-(def ^:private CompletionProvider (js/require "../lib/completion-provider"))
 (def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
 
 (defonce subscriptions (CompositeDisposable.))
@@ -152,11 +152,6 @@
     (reset! toolbar tb)))
 
 
-(defn- provide-autocomplete []
-  "Called by autocomplete-plus to return our Clojure provider"
-  (if (js/atom.config.get "proto-repl.enableCompletions") CompletionProvider []))
-
-
 (defn- activate []
   (.add subscriptions
         (.add
@@ -199,7 +194,7 @@
             :consumeToolbar consume-toolbar
             :consumeInk ink/init
             :deactivate deactivate
-            :provide provide-autocomplete}))
+            :provideAutocomplete provide-autocomplete}))
 
 
 (set!

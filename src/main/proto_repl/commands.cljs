@@ -15,21 +15,12 @@
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
-(def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
 
 (defonce ^:private emitter (Emitter.))
-(defonce ^:private extensions-feature (ExtensionsFeature.))
-(defonce ^:private repl (atom nil)
+(defonce ^:private repl (atom nil))
 
- (defn running? []
-  (some-> repl deref r/running?)))
-
-(defn execute-code
-  "Execute the given code string in the REPL. See proto-repl.repl/execute-code for supported
-  options."
-  ([code] (execute-code code nil))
-  ([code options] (some-> @repl (r/execute-code (str code) (or options {})))))
-
+(defn running? []
+  (some-> repl deref r/running?))
 
 (defn get-nrepl-client [] (some-> repl deref :new-connection deref))
 
@@ -68,21 +59,6 @@
    (or (not-empty (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"}))
        (do (stderr "This command requires you to position the cursor on a Clojure var.")
            nil))))
-
-
-(defn register-code-execution-extension
-  "Registers a code execution extension with the given name and callback function.
-
-  Code execution extensions allow other Atom packages to extend Proto REPL
-  by taking output from the REPL and redirecting it for other uses like
-  visualization.
-  Code execution extensions are triggered when the result of code execution is
-  a vector with the first element is :proto-repl-code-execution-extension. The
-  second element in the vector should be the name of the extension to trigger.
-  The name will be used to locate the callback function. The third element in
-  the vector will be passed to the callback function."
-  [name callback]
-  (.registerCodeExecutionExtension extensions-feature name callback))
 
 
 (defn- flash-highlight-range [editor range]
@@ -170,10 +146,8 @@
   (println "refresh-namespaces")
   (go-try-log
     (info "Refreshing code...")
-    (let [{:keys [value]} (<! (new-eval-code {:code refresh-namespaces-code}))]
-      (when value
-        (info value)
-        (.startExtensionRequestProcessing extensions-feature)))))
+    (some-> (new-eval-code {:code refresh-namespaces-code})
+            <! :value info)))
 
 
 (defn super-refresh-namespaces
@@ -188,8 +162,7 @@
                          {:code '(when (find-ns 'clojure.tools.namespace.repl)
                                    (eval '(clojure.tools.namespace.repl/clear)))})
                        <! :value)]
-      (do (info "Refresh complete")
-          (.startExtensionRequestProcessing extensions-feature))
+      (info "Refresh complete")
       (stderr "Refresh failed"))))
 
 
@@ -202,12 +175,9 @@
              (when (.get js/atom.config "proto-repl.refreshOnReplStart")
                (refresh-namespaces))
              (.activate pane)))
-    (r/on-did-close r
-      (fn [] (reset! repl nil)
-             (.emit emitter "proto-repl:closed")))
-    (r/on-did-stop r
-      (fn [] (.stopExtensionRequestProcessing extensions-feature)
-             (.emit emitter "proto-repl:stopped")))))
+    (r/on-did-close r (fn [] (reset! repl nil)
+                             (.emit emitter "proto-repl:closed")))
+    (r/on-did-stop r #(.emit emitter "proto-repl:stopped"))))
 
 ;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -216,7 +186,7 @@
 
 (defn- handle-remote-nrepl-connection [params]
   (when-not @repl
-    (let [r (r/make-repl extensions-feature)]
+    (let [r (r/make-repl)]
       (prepare-repl r)
       (r/start-remote-repl-connection r params)
       (reset! connection-view nil)

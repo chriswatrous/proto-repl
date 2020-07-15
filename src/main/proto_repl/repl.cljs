@@ -10,9 +10,6 @@
             [proto-repl.ink :as ink]
             [proto-repl.views.repl-view :as rv]
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
-            [proto-repl.repl-client.core :as rc]
-            [proto-repl.repl-client.nrepl :refer [connect-to-nrepl]]
-            [proto-repl.repl-client.process :refer [start-repl-process]]
             [proto-repl.repl-client.nrepl-client :as nrepl]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
 
@@ -71,16 +68,6 @@ You can disable this help text in the settings.")
 
 (defn- handle-repl-stopped [this]
   (-> this :emitter (.emit "proto-repl-repl:stop")))
-
-(defn- handle-connection-message [this msg]
-  (let [{:keys [out err value]} (obj->map msg)]
-    (cond
-      out (stdout this out)
-      err (stderr this err)
-      value (do (info this (str (rc/get-current-ns @(:connection this)) "=>"))
-                (-> this :view
-                    (rv/result (if (get-config :auto-pretty-print)
-                                 (pretty-edn value) value)))))))
 
 (defn- build-tree-view [[head button-options & children]]
   (let [button-options (or button-options {})
@@ -151,40 +138,10 @@ You can disable this help text in the settings.")
         (display-nrepl-message this m))
       (when spinid (.stop spinner editor spinid)))))
 
-(defrecord ^:private ReplImpl [emitter current-ns spinner extensions-feature connection
+(defrecord ^:private ReplImpl [emitter current-ns spinner connection
                                new-connection view]
   Repl
   (clear [_] (rv/clear view))
-
-  ; Executes the given code string.
-  ; options:
-  ;   :resultHandler - a callback function to invoke with the value that was read. If this is
-  ;                    passed in then the value will not be displayed in the REPL.
-  ;   :displayCode - Code to display in the REPL. This can be used when the code
-  ;                  executed is wrapped in eval or other code that shouldn't be displayed to
-  ;                  the user.
-  ;   :displayInRepl - Boolean to indicate if the result value or error should be
-  ;                    displayed in the REPL. Defaults to true.
-  ;   :doBlock - Boolean to indicate if the incoming code should be wrapped in a
-  ;              do block when it contains multiple statements.
-  (execute-code* [this code {:keys [resultHandler displayCode inlineOptions doBlock
-                                    alwaysDisplay]
-                             :as options}]
-    (when (running? this)
-      (when (or alwaysDisplay
-                (and displayCode (get-config :display-executed-code-in-repl)))
-        (rv/display-executed-code view displayCode))
-      (let [spinid (when inlineOptions (.startAt spinner
-                                                 (:editor inlineOptions)
-                                                 (:range inlineOptions)))
-            command (if doBlock (maybe-wrap-do-block code) code)]
-        (rc/send-command @connection command options
-          (fn [result]
-            (.stop spinner (:editor inlineOptions) spinid)
-            (when-not (some->> result .-value (.handleReplResult extensions-feature))
-              (if resultHandler
-                (resultHandler result)
-                (inline-result-handler this result options))))))))
 
   (eval-and-display [this options]
     (eval-and-display* this options))
@@ -197,12 +154,8 @@ You can disable this help text in the settings.")
   (exit [this]
     (when (running? this)
       (info this "Stopping REPL")
-      (rc/stop @connection)
-      (reset! connection nil)
       (nrepl/close @new-connection)
       (reset! new-connection nil)))
-
-  (get-type [_] (rc/get-type @connection))
 
   (inline-result-handler [this result {:keys [inlineOptions]}]
     (when (and inlineOptions (get-config :show-inline-results))
@@ -230,18 +183,12 @@ You can disable this help text in the settings.")
   (on-did-stop [_ callback]
     (.on emitter "proto-repl-repl:stop" callback))
 
-  (running? [_] (some-> @connection rc/running?))
+  (running? [_] (boolean @new-connection))
 
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (rv/stderr view "already connected")
       (go-try-log
-        (reset! connection (connect-to-nrepl
-                             {:host host
-                              :port port
-                              :on-message #(handle-connection-message this %)
-                              :on-start #(handle-repl-started this)
-                              :on-stop #(handle-repl-stopped this)}))
         (let [c (<! (nrepl/create-client {:host host :port port}))]
           (if-let [err (ex-message c)]
             (rv/stderr view err)
@@ -265,7 +212,7 @@ You can disable this help text in the settings.")
   (stderr [_ text] (rv/stderr view text))
   (stdout [_ text] (rv/stdout view text)))
 
-(defn make-repl [extensions-feature]
+(defn make-repl []
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))
   (let [connection (atom nil)
         new-connection (atom nil)
@@ -274,7 +221,6 @@ You can disable this help text in the settings.")
         repl (map->ReplImpl {:current-ns (atom "user")
                              :emitter emitter
                              :spinner (Spinner.)
-                             :extensions-feature extensions-feature
                              :connection connection
                              :new-connection new-connection
                              :view view})]
@@ -282,8 +228,7 @@ You can disable this help text in the settings.")
       (info repl repl-help-text))
     (rv/on-did-close view
       ; FIXME exception in close handler causes REPL to not be able to start again.
-      (fn [] (try (some-> @connection rc/stop)
-                  (some-> @new-connection nrepl/close)
+      (fn [] (try (some-> @new-connection nrepl/close)
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))
     repl))

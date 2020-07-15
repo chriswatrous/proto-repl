@@ -10,8 +10,3 @@
   (stdout [this text])
   (doc [this text])
   (result [this text]))
-
-(defn js-wrapper [view]
-  #js{:info #(info view %)
-      :stdout #(stdout view %)
-      :stderr #(stderr view %)})

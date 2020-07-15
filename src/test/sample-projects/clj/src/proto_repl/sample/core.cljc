@@ -37,6 +37,10 @@
   (.qwer 5)
   (do *e))
 
+;reader conditional
+(do #?(:clj "clojure"
+       :cljs #js {}))
+
 ; FIXME should work on bare symbols, keywords, numbers, strings
 map
 123

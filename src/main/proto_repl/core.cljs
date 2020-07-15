@@ -8,7 +8,6 @@
             [proto-repl.autocomplete :refer [provide-autocomplete]]))
 
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
-(def ^:private ExtensionsFeature (js/require "../lib/features/extensions-feature"))
 
 (defonce subscriptions (CompositeDisposable.))
 (defonce toolbar (atom nil))
@@ -195,32 +194,6 @@
             :consumeInk ink/init
             :deactivate deactivate
             :provideAutocomplete provide-autocomplete}))
-
-
-(set!
-  js/window.protoRepl
-  #js {:onDidConnect #(.on c/emitter "proto-repl:connected" %)
-       :onDidClose #(.on c/emitter "proto-repl:closed" %)
-       :onDidStop #(.on c/emitter "proto-repl:stopped" %)
-       :running #(r/running? @repl)
-       :registerCodeExecutionExtension c/register-code-execution-extension
-       :getClojureVarUnderCursor c/get-var-under-cursor
-       :executeCode #(c/execute-code %1 (or (js->clj %2 :keywordize-keys true) {}))
-       ; :executeCodeInNs #(c/execute-code-in-ns %1 (or (js->clj %2 :keywordize-keys true) {}))
-       :isSelfHosted (fn [] false)
-
-       ; Utility functions
-       :parseEdn (get-bind edn-reader :parse)
-       :prettyEdn u/pretty-edn
-       :ednToDisplayTree u/edn->display-tree
-       :jsToEdn u/js->edn
-       :ednSavedValuesToDisplayTrees u/edn-saved-values->display-trees
-
-       ; Helpers for adding text to the REPL.
-       :info c/info
-       :stderr c/stderr
-       :stdout c/stdout
-       :doc c/doc})
 
 
 (let [notification (js/atom.notifications.addInfo "proto-repl loaded" #js {:dismissable true})]

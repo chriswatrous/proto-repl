@@ -187,6 +187,11 @@
   (reset! repl nil))
 
 
+(aset js/window "protoRepl"
+  #js{:eval #(c/external-eval %)
+      :logNreplMessages false})
+
+
 (def exports
   (clj->js {:activate activate
             :config config

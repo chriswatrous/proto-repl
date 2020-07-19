@@ -2,22 +2,6 @@
 edn_reader = require './proto_repl/edn_reader.js'
 
 module.exports = EditorUtils =
-
-  # Escapes the Clojure code and places it in quoatations
-  escapeClojureCodeInString: (code)->
-    escaped = code.replace(/\\/g,"\\\\").replace(/"/g, "\\\"")
-    "\"#{escaped}\""
-
-  # Finds a Clojure Namespace declaration in the editor and returns the name
-  # of the namespace.
-  findNsDeclaration: (editor)->
-    for range in @getTopLevelRanges(editor)
-      txt = editor.getTextInBufferRange(range)
-      try
-        return edn_reader.parse(txt)[1] if txt.match(/^\(ns /)
-      catch e
-        return null
-
   # Returns true if the position in the text editor is in a Markdown file in a
   # code block that contains Clojure.
   isPosInClojureMarkdown: (editor, pos)->
@@ -148,68 +132,3 @@ module.exports = EditorUtils =
         # It's safer to search from the start of the startPos instead of searching from the end position
         if endPos = @findMarkdownCodeBlockEndPosition(editor, startPos)
           new Range(startPos, endPos)
-
-  # If the cursor is located in a Clojure block (in parentheses, brackets, or
-  # braces) or next to one returns the text of that block. Also works with
-  # Markdown blocks of code starting with  ```clojure  and ending with ```.
-  getCursorInBlockRange: (editor, {topLevel} = {topLevel: false})->
-    if topLevel and range = @getCursorInClojureTopBlockRange(editor,{lookInComments: true})
-      range
-    else if range = @getCursorInClojureBlockRange(editor)
-      range
-    else
-      @getCursorInMarkdownBlockRange(editor)
-
-  # Constructs a list of `Range`s, one for each top level form.
-  getTopLevelRanges:  (editor, {lookInComments}={lookInComments: false}) ->
-    ranges = []
-    braceOpened = 0
-    inTopLevelComment = false
-    if lookInComments
-      rex = /(\(comment\s|[\{\}\[\]\(\)])/g
-    else
-      rex = /[\{\}\[\]\(\)]/g
-    editor.scan rex, (result) =>
-      if !(@isIgnorableBrace(editor, result.range.start))
-        matchesComment = result.matchText.match(/^\(comment\s/)
-        if matchesComment and braceOpened == 0
-          inTopLevelComment = true
-        c = ""+result.match[0]
-        if ["(","{","["].indexOf(c) >= 0 or matchesComment
-          if (braceOpened == 1 and inTopLevelComment == true) or
-             (braceOpened == 0 and inTopLevelComment == false)
-            ranges.push([result.range.start])
-          braceOpened++
-        else if [")","}","]"].indexOf(c) >= 0
-          braceOpened--
-          if (braceOpened == 1 and inTopLevelComment == true) or
-             (braceOpened == 0 and inTopLevelComment == false)
-            ranges[ranges.length - 1].push(result.range.end)
-          if braceOpened == 0 and inTopLevelComment == true
-            inTopLevelComment = false
-    ranges
-      .filter((range) -> range.length == 2)
-      .map((range) -> Range.fromObject(range))
-
-  # Returns the `Range` that corresponds to the top level form that contains the current cursor position.
-  # Doesn't work in Markdown blocks of code.
-  getCursorInClojureTopBlockRange: (editor,options={})->
-    pos = editor.getCursorBufferPosition()
-    topLevelRanges = @getTopLevelRanges(editor,options)
-    topLevelRanges.find (range) -> range.containsPoint(pos)
-
-  # Searches all open text editors for the given string. Returns a tuple of the
-  # editor found and the range within the editor for the first location that
-  # matches
-  findEditorRangeContainingString: (str)->
-    editors = atom.workspace.getTextEditors()
-    # Create a literal regex to search for the given str
-    # From http://stackoverflow.com/questions/3561493/is-there-a-regexp-escape-function-in-javascript
-    regex = new RegExp(str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
-
-    for editor in editors
-      foundRange = null
-      editor.scan regex, (matched)=>
-        foundRange = matched.range
-        matched.stop()
-      return [editor, foundRange] if foundRange

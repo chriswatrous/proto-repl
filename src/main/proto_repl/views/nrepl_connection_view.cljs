@@ -15,7 +15,6 @@
                   first)]
     (if path (str (fs/readFileSync path)) "")))
 
-
 (def ConnectionViewImpl
   (make-js-class
     {:name "ConnectionViewImpl"

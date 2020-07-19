@@ -5,35 +5,33 @@
             [clojure.core.async :as async]
             ["atom" :refer [Emitter]]
             ["path" :refer [dirname]]
-            [proto-repl.editor-utils :refer [get-active-text-editor]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
             [proto-repl.views.nrepl-connection-view :as cv]
             [proto-repl.macros :refer-macros [go-try-log dochan! when-let+ template-fill]]
-            [proto-repl.utils :refer [get-config safe-async-transduce wrap-reducer-try-log]]
+            [proto-repl.editor-utils :refer [get-active-text-editor
+                                             get-ns-from-declaration
+                                             get-cursor-in-block-range]]
+            [proto-repl.utils :refer [get-config
+                                      safe-async-transduce
+                                      wrap-reducer-try-log]]
             [proto-repl.repl-client.nrepl-client :as nrepl]))
+
 
 (def ^:private lodash (js/require "lodash"))
 (def ^:private editor-utils (js/require "../lib/editor-utils"))
 
+
 (defonce ^:private emitter (Emitter.))
 (defonce ^:private repl (atom nil))
 
-(defn running? []
-  (some-> repl deref r/running?))
 
+(defn running? [] (some-> repl deref r/running?))
 (defn get-nrepl-client [] (some-> repl deref :new-connection deref))
-
-
 (defn info [text] (some-> @repl (r/info text)))
 (defn stderr [text] (some-> @repl (r/stderr text)))
 (defn stdout [text] (some-> @repl (r/stdout text)))
 (defn doc [text] (some-> @repl (r/doc text)))
-
-
-(defn- get-current-ns []
-  (some->> (get-active-text-editor)
-           (.findNsDeclaration editor-utils)))
 
 
 (defn nrepl-request [msg]
@@ -66,14 +64,17 @@
     (.decorateMarker editor marker #js {:type "highlight" :class "block-execution"})
     (js/setTimeout #(.destroy marker) 350)))
 
+(defn external-eval [code]
+  (r/eval-and-display @repl {:code code}))
+
 (defn execute-block
   ([{:keys [top-level]}]
    (when-let+ [editor (get-active-text-editor)
-               range (.getCursorInBlockRange editor-utils editor #js {:topLevel top-level})]
+               range (get-cursor-in-block-range {:editor editor :top-level top-level})]
      (flash-highlight-range editor range)
      (r/eval-and-display @repl
                          {:code (-> editor (.getTextInBufferRange range) str/trim)
-                          :ns (.findNsDeclaration editor-utils editor)
+                          :ns (get-ns-from-declaration editor)
                           :editor editor
                           :range range}))))
 
@@ -88,13 +89,9 @@
      (r/eval-and-display @repl
                          {:code (or (not-empty (.getSelectedText editor))
                                     (get-var-under-cursor editor))
-                          :ns (.findNsDeclaration editor-utils editor)
+                          :ns (get-ns-from-declaration editor)
                           :editor editor
                           :range range}))))
-
-
-(defn- get-top-level-ranges [editor]
-  (into [] (.getTopLevelRanges editor-utils editor)))
 
 
 (defn clear-repl []
@@ -221,7 +218,7 @@
       (when (get-config :refresh-before-running-test-file)
         (<! (refresh-namespaces)))
       (<! (r/eval-and-display @repl {:code '(time (clojure.test/run-tests))
-                                     :ns (get-current-ns)})))))
+                                     :ns (get-ns-from-declaration)})))))
 
 
 (defn run-test-under-cursor []
@@ -231,7 +228,7 @@
         (<! (refresh-namespaces)))
       (<! (r/eval-and-display @repl
                               {:code (str "(time (clojure.test/test-vars [#'" test-name "]))")
-                               :ns (get-current-ns)})))))
+                               :ns (get-ns-from-declaration)})))))
 
 
 (defn run-all-tests []
@@ -252,7 +249,7 @@
 
 (defn- run-doc-like-command [code]
   (go-try-log
-    (let [result (-> (new-eval-code {:code code :ns (get-current-ns)})
+    (let [result (-> (new-eval-code {:code code :ns (get-ns-from-declaration)})
                      <! :value edn/read-string)]
       (if-let [error (:error result)]
         (stderr error)
@@ -409,7 +406,7 @@
   (go-try-log
     (when-let+ [var-name (get-var-under-cursor)
                 value (:value (<! (new-eval-code {:code (open-file-containing-var-code var-name)
-                                                  :ns (get-current-ns)})))
+                                                  :ns (get-ns-from-declaration)})))
                 [file line] (edn/read-string value)
                 file (str/replace file #"%20" " ")]
       (.open js/atom.workspace file (js-obj "initialLine" (dec line)

@@ -8,7 +8,9 @@
             [clojure.core.async :as async
                                 :refer [chan buffer put! close!]
                                 :refer-macros [go]]
-            [proto-repl.utils :refer [safe-async-transduce
+            [proto-repl.utils :refer [js-typeof
+                                      safe-async-transduce
+                                      safe-async-reduce
                                       wrap-reducer-try-log]]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
 
@@ -53,16 +55,17 @@
   bencode.decode returns Dict objects instead of plain objects so js->clj won't work."
   (cond
     (js/Array.isArray data) (mapv bencode-response->clj data)
-    (= (js* "(typeof ~{})" data) "object") (->> data
-                                                js/Object.entries
-                                                (map (fn [[k v]] [(keyword k)
-                                                                  (bencode-response->clj v)]))
-                                                (into {}))
+    (= (js-typeof data) "object") (->> data
+                                       js/Object.entries
+                                       (map (fn [[k v]] [(keyword k)
+                                                         (bencode-response->clj v)]))
+                                       (into {}))
     :else data))
 
 (defn- deep-remove-nil [data]
   (prewalk #(if (map? %)
-              (->> % (remove (comp nil? second)) (into {}))
+              (reduce-kv (fn [m k v] (if (nil? v) (dissoc m k) m))
+                         % %)
               %)
            data))
 
@@ -72,17 +75,9 @@
       clj->js
       (bencode.encode "utf8")))
 
-(defn- bencode->clj "Decode bencode data to cljs data." [buffer]
-  (-> buffer
-      (bencode.decode "utf8")
-      bencode-response->clj))
-
-(defn- try-bencode->clj
-  "Decode bencode data to cljs data or return nil if the buffer doesn't
-  contain a complete message."
-  [buffer]
+(defn- try-bencode-decode [buffer]
   (try
-    (bencode->clj buffer)
+    (bencode.decode buffer "utf8")
     ; An exception will be thrown if the buffer is empty or doesn't
     ; contain a complete bencode message.
     (catch :default _)))
@@ -92,17 +87,18 @@
   [rf]
   (let [buffer (volatile! (js/Buffer.from ""))
         rf1 (preserving-reduced rf)]
-    (fn
-      ([] (rf))
-      ([result] (rf result))
-      ([result input]
-       (vswap! buffer #(js/Buffer.concat #js [% input]))
-       (reduce rf1 result
-               (loop [messages []]
-                 (if-let [m (try-bencode->clj @buffer)]
-                   (do (vswap! buffer #(.slice % (.-length (clj->bencode m))))
-                       (recur (conj messages m)))
-                   messages)))))))
+    (fn ([] (rf))
+        ([result] (rf result))
+        ([result input]
+         (vswap! buffer #(js/Buffer.concat #js [% input]))
+         (reduce rf1 result
+                 (loop [messages []]
+                   (if-let [m (try-bencode-decode @buffer)]
+                     (do (vswap! buffer #(.slice % (.-length (bencode.encode m))))
+
+                         (recur (conj messages (bencode-response->clj m))))
+                     messages)))))))
+
 
 (defn- status-to-keyword-set [message]
   (if (:status message)
@@ -147,7 +143,8 @@
     (go-try-log
       (loop []
         (when-let [message (<! message-chan)]
-          (print-message "<-" message)
+          (when js/window.protoRepl.logNreplMessages
+            (print-message "<-" message))
           (if-let [c (@pending-chans (:id message))]
             (do (put! c message)
                 (when (-> message :status :done)
@@ -165,8 +162,9 @@
   (let [message (-> message
                     (assoc :session session-id)
                     (as-> % (if (:code %) (update % :code str) %)))]
-    (println "-------------------------")
-    (print-message "->" message)
+    (when js/window.protoRepl.logNreplMessages
+      (println "-------------------------")
+      (print-message "->" message))
     (.write socket (clj->bencode message) "binary")))
 
 (defn request
@@ -293,3 +291,7 @@
         pprint))
 
   (async/go (.qwer 5)))
+
+
+(defn get-value "Get the value from a channel of nREPL messages." [c]
+  (safe-async-reduce (fn [result {:keys [value]}] (if (nil? value) result value)) nil c))

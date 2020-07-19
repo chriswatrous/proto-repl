@@ -129,7 +129,7 @@ map
 
 ; interrupt (ctrl-shift-c) -------------------------------------------------------------------------
 
-; TODO Maybe have this command only do something if an evaluation is waiting?
+; TODO Maybe say "Nothing to interrupt." if no eval is waiting.
 ; TODO show namespace after interrupting
 
 ; execute these and interrupt before the first one returns
@@ -212,6 +212,7 @@ map
 ; get doc for this
 (defn blah2
   "Sample docstring with special characters.
+  <h1>should not be big</h1>
   ~`!@#$%^&*()_-+={[}]|\\:;'\"<,>.?/
   end"
   [])

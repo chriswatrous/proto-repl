@@ -1,15 +1,10 @@
 {:source-paths ["src/main" "src/test"]
- :dependencies [
-                ; [org.clojure/core.async "0.4.500"]
-                [org.clojure/core.async "1.2.603"]
+ :dependencies [[org.clojure/core.async "1.2.603"]
                 [funcool/promesa "5.1.0"]
                 [fipp "0.6.23"]
-                ; This is used by fipp and this version fixes a warning.
-                ; [org.clojure/core.rrb-vector "0.1.1"]
                 [proto-repl "0.3.1"]]
  :nrepl {:port 1234}
  :builds {:dev {:target :node-library
                 :output-to "target/proto-repl.js"
                 :exports-var proto-repl.core/exports
-                :main proto-repl.core/main
                 :devtools {:after-load server.main/reload!}}}}

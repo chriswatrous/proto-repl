@@ -2,7 +2,8 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             ["atom" :refer [Range]]
-            [proto-repl.utils :refer [comp+ global-regex obj->map regex-or]]))
+            [proto-repl.utils :refer [comp+ global-regex obj->map regex-or]]
+            [proto-repl.macros :refer-macros [reducing-fn]]))
 
 
 (def ^:private eu (js/require "../lib/editor-utils"))
@@ -48,24 +49,21 @@
           in-top-level-comment (volatile! false)
           at-adjusted-level? #(or (and (= @level %) (not @in-top-level-comment))
                                   (and (= @level (inc %)) @in-top-level-comment))]
-      (fn
-        ([] (rf))
-        ([result] (rf result))
-        ([result {:keys [range match-text]}]
-         (if (#{"(" "{" "["} (first match-text))
-           (do (vswap! level inc)
-               (when (and (= @level 1) (re-matches comment-pattern match-text))
-                 (vreset! in-top-level-comment true))
-               (when (at-adjusted-level? 1)
-                 (vreset! start (.-start range)))
-               result)
-           (do (vswap! level dec)
-               (let [new-result (if (at-adjusted-level? 0)
-                                  (rf result (Range. @start (.-end range)))
-                                  result)]
-                 (when (= @level 0)
-                   (vreset! in-top-level-comment false))
-                 new-result))))))))
+      (reducing-fn [rf result {:keys [range match-text]}]
+        (if (#{"(" "{" "["} (first match-text))
+          (do (vswap! level inc)
+              (when (and (= @level 1) (re-matches comment-pattern match-text))
+                (vreset! in-top-level-comment true))
+              (when (at-adjusted-level? 1)
+                (vreset! start (.-start range)))
+              result)
+          (do (vswap! level dec)
+              (let [new-result (if (at-adjusted-level? 0)
+                                 (rf result (Range. @start (.-end range)))
+                                 result)]
+                (when (= @level 0)
+                  (vreset! in-top-level-comment false))
+                new-result)))))))
 
 
 (defn get-top-level-ranges

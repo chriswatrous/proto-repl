@@ -151,3 +151,9 @@
 
 (defn comp+ "Compose functions, removing nil values" [& funcs]
   (apply comp (remove nil? funcs)))
+
+
+(defn update-if-present [m k f & args]
+  (if (contains? m k)
+   (apply update m k f args)
+   m))

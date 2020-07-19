@@ -35,7 +35,8 @@
 
 
 (defn nrepl-request [msg]
-  (some-> (get-nrepl-client) (nrepl/request msg)))
+  (some-> (get-nrepl-client)
+          (nrepl/request msg)))
 
 
 (defn new-eval-code [options]

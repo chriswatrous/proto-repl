@@ -273,6 +273,4 @@ map
 (comment
   ; retype these
   clojure.string/join
-  map
-
-  preserving-reduced)
+  map)

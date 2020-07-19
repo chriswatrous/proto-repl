@@ -1,11 +1,13 @@
 (ns proto-repl.macros
   (:require [clojure.core.async]))
 
+
 (defmacro this-fn [params & body]
   (let [this-sym (first params)
         other-params (vec (rest params))]
     `(fn ~other-params
        (cljs.core/this-as ~this-sym ~@body))))
+
 
 (defmacro go-try-log
   "Go block that catches and logs errors.
@@ -13,6 +15,7 @@
   \"DevTools was disconnected from the page.\""
   [& body]
   `(cljs.core.async/go (try ~@body (catch :default err# (js/console.error err#)))))
+
 
 (defmacro dochan!
   "Repeatedly executes body (presumably for side-effects) with values
@@ -25,8 +28,9 @@
          ~@body
          (recur)))))
 
+
 (defmacro when-let+
-  "Multiple bindings version of whenn-let taken from
+  "Multiple bindings version of when-let taken from
   https://clojuredocs.org/clojure.core/when-let
   and improved slightly"
   [bindings & body]
@@ -35,6 +39,7 @@
        (when-let+ ~(vec (drop 2 bindings)) ~@body))
     `(do ~@body)))
 
+
 (defmacro template-fill
   "Wrap body in (do ...), convert to string, and string replace placeholders"
   [placeholders & body]
@@ -42,6 +47,7 @@
              (clojure.string/replace result# placeholder# value#))
            ~(str (apply list 'do body))
            ~(mapv (fn [p] [(name p) p]) placeholders)))
+
 
 (defmacro go-promise
   "A go block that returns a JavaScript promise. The return value of
@@ -54,3 +60,12 @@
          (try
            (resolve# (do ~@body))
            (catch :default err# (reject# err#)))))))
+
+
+(defmacro reducing-fn
+  "Create a reducing function, automatically creating the 0 and 1 arities."
+  [[rf-sym result-form input-form] & body]
+  `(fn
+     ([] (~rf-sym))
+     ([result#] (~rf-sym result#))
+     ([~result-form ~input-form] ~@body)))

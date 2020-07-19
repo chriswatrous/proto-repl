@@ -11,44 +11,14 @@
             [proto-repl.utils :refer [js-typeof
                                       safe-async-transduce
                                       safe-async-reduce
+                                      update-if-present
                                       wrap-reducer-try-log]]
-            [proto-repl.macros :refer-macros [go-try-log dochan!]]))
+            [proto-repl.macros :refer-macros [go-try-log dochan! reducing-fn]]))
+
 
 (def ^:private bencode (js/require "bencode"))
 (def ^:private net (js/require "net"))
 
-(declare client)
-
-(comment
-  (nrepl-close client)
-
-  (go-try-log
-    ; (def client (<! (make-nrepl-client {:host "localhost" :port 2345})))
-    (def client (<! (make-nrepl-client {:host "localhost" :port 1111}))))
-
-  (go-try-log
-    (dochan! [m (nrepl-request client {:op "eval" :code (str '(println "qwer")
-                                                             '(println "qwer"))})]))
-
-  (go-try-log
-    (dochan! [m (nrepl-request client {:op "eval" :code (str '(+ 1 1))})]))
-
-  (go-try-log
-    (dochan! [m (nrepl-request client {:op "eval"
-                                       :code (str '(println "Qwer"))})]))
-
-  (def session "747ab495-e85a-4c5f-baac-a85dc82baa71")
-
-  (send client {:op "ls-sessions"})
-  (send client {:op "clone"})
-  (send client {:op "close" :session "183e4504-68b6-40cc-9d3e-bc37fb6c3da8"})
-  (send client {:op "describe"})
-  (send client {:op "interrupt" :session "" :interrupt-id "12345"})
-  (send client {:op "eval"
-                :id "12345"
-                :code (str '(dotimes [_ 5]
-                              (Thread/sleep 1000)
-                              (println "asdf")))}))
 
 (defn- bencode-response->clj [data]
   "Convert bencode.decode response to cljs with keyword keys.
@@ -62,6 +32,7 @@
                                        (into {}))
     :else data))
 
+
 (defn- deep-remove-nil [data]
   (prewalk #(if (map? %)
               (reduce-kv (fn [m k v] (if (nil? v) (dissoc m k) m))
@@ -69,11 +40,13 @@
               %)
            data))
 
+
 (defn- clj->bencode "Encode cljs data to bencode." [data]
   (-> data
       deep-remove-nil
       clj->js
       (bencode.encode "utf8")))
+
 
 (defn- try-bencode-decode [buffer]
   (try
@@ -82,28 +55,27 @@
     ; contain a complete bencode message.
     (catch :default _)))
 
+
 (defn- bencode-buffers->clj
   "A stateful transducer that converts bencoded Buffers to Clojure data."
   [rf]
   (let [buffer (volatile! (js/Buffer.from ""))
         rf1 (preserving-reduced rf)]
-    (fn ([] (rf1))
-        ([result] (rf1 result))
-        ([result input]
-         (vswap! buffer #(js/Buffer.concat #js [% input]))
-         (reduce rf1 result
-                 (loop [messages []]
-                   (if-let [m (try-bencode-decode @buffer)]
-                     (do (vswap! buffer #(.slice % (.-length (bencode.encode m))))
+    (reducing-fn [rf1 result input]
+      (vswap! buffer #(js/Buffer.concat #js [% input]))
+      (reduce rf1 result
+              (loop [messages []]
+                (if-let [m (try-bencode-decode @buffer)]
+                  (do (vswap! buffer #(.slice % (.-length (bencode.encode m))))
 
-                         (recur (conj messages (bencode-response->clj m))))
-                     messages)))))))
+                      (recur (conj messages (bencode-response->clj m))))
+                  messages))))))
+
 
 
 (defn- status-to-keyword-set [message]
-  (if (:status message)
-    (update message :status #(set (map keyword %)))
-    message))
+  (update-if-present message :status #(set (map keyword %))))
+
 
 (defn- nrepl-connect "Open an nREPL connection." [{:keys [host port]}]
   (let [message-chan (chan (buffer 1) (comp bencode-buffers->clj
@@ -130,6 +102,7 @@
                       (close! client-chan))))
     client-chan))
 
+
 (defn- print-message [direction message]
   (binding [*print-miser-width* 120
             *print-right-margin* 120]
@@ -137,6 +110,7 @@
                            (str/replace #"\n" (apply str "\n"
                                                      (repeat (inc (count direction)) " ")))
                            str/trim))))
+
 
 (defn- wrap-request-response [{:keys [message-chan] :as client}]
   (let [pending-chans (atom {})]
@@ -157,8 +131,8 @@
         (dissoc :message-chan)
         (assoc :pending-chans pending-chans))))
 
-(defn- send "Send an nREPL message." [{:keys [socket session-id]} message]
 
+(defn- send "Send an nREPL message." [{:keys [socket session-id]} message]
   (let [message (-> message
                     (assoc :session session-id)
                     (as-> % (if (:code %) (update % :code str) %)))]
@@ -166,6 +140,7 @@
       (println "-------------------------")
       (print-message "->" message))
     (.write socket (clj->bencode message) "binary")))
+
 
 (defn request
   "Send a request to an nREPL connection. Returns a channel that will
@@ -177,12 +152,14 @@
     (send client (assoc message :id id))
     c))
 
+
 (defn- wrap-create-session [client]
   (go-try-log
     (assoc client :session-id
            (<! (async/reduce (fn [result {:keys [new-session]}] (or new-session result))
                              nil
                              (request client {:op "clone"}))))))
+
 
 (defn create-client [options]
   (go
@@ -196,6 +173,7 @@
               <!)))
       (catch :default err err))))
 
+
 (defn close "Close an nREPL connection or client." [client]
   ; Close channels first to make sure an error doesn't get reported.
   (->> (concat (map client [:error-chan :message-chan])
@@ -203,6 +181,7 @@
        (remove nil?)
        (run! close!))
   (.destroy (:socket client)))
+
 
 (defn- collect-eval-result [messages-chan]
   (safe-async-transduce
@@ -226,71 +205,14 @@
      :status #{}}
     messages-chan))
 
+
 (defn eval [client options]
   (collect-eval-result (request client (-> options (assoc :op "eval") (update :code str)))))
+
 
 (defn interrupt [{:keys [pending-chans session-id] :as client}]
   (doseq [id (keys @pending-chans)]
     (close! (request client {:op "interrupt" :interrupt-id id}))))
-
-
-
-; TODO make unit tests out of these
-(comment
-  ; error
-  (go-try-log
-    (-> (async/to-chan
-          [{:err (str "Syntax error (ClassNotFoundException) compiling at "
-                      "(REPL:1:7).\njava.lang.ProceissHandle\n")
-            :id "7b3bb851-bb65-4019-b5e8-451f4343bb84"
-            :session "cbb9533e-78f7-4528-bd1d-a4c29936cf99"}
-           {:ex "class clojure.lang.Compiler$CompilerException"
-            :id "7b3bb851-bb65-4019-b5e8-451f4343bb84"
-            :root-ex "class clojure.lang.Compiler$CompilerException"
-            :session "cbb9533e-78f7-4528-bd1d-a4c29936cf99"
-            :status #{:eval-error}}
-           {:id "7b3bb851-bb65-4019-b5e8-451f4343bb84"
-            :session "cbb9533e-78f7-4528-bd1d-a4c29936cf99"
-            :status #{:done}}])
-        collect-eval-result
-        <!
-        pprint))
-
-  ; value
-  (go-try-log
-    (-> (async/to-chan
-          [{:id "f30969ec-8646-44ea-9d92-d5ecb7022329"
-            :ns "user"
-            :session "1797460c-4763-44cf-b9c3-20637f3d3004"
-            :value "32118"}
-           {:id "f30969ec-8646-44ea-9d92-d5ecb7022329"
-            :session "1797460c-4763-44cf-b9c3-20637f3d3004"
-            :status #{:done}}])
-        collect-eval-result
-        <!
-        pprint))
-
-  ; stdout and stderr
-  (go-try-log
-    (-> (async/to-chan
-          [{:id "83e2ff56-b428-4c48-8d4a-54d1234e4a36"
-            :out "qwer\n"
-            :session "0ea06290-9c3b-418b-98fd-ae3db618bb07"}
-           {:err "asdf\n"
-            :id "83e2ff56-b428-4c48-8d4a-54d1234e4a36"
-            :session "0ea06290-9c3b-418b-98fd-ae3db618bb07"}
-           {:id "83e2ff56-b428-4c48-8d4a-54d1234e4a36"
-            :ns "proto-repl.sample.core"
-            :session "0ea06290-9c3b-418b-98fd-ae3db618bb07"
-            :value "nil"}
-           {:id "83e2ff56-b428-4c48-8d4a-54d1234e4a36"
-            :session "0ea06290-9c3b-418b-98fd-ae3db618bb07"
-            :status #{:done}}])
-        collect-eval-result
-        <!
-        pprint))
-
-  (async/go (.qwer 5)))
 
 
 (defn get-value "Get the value from a channel of nREPL messages." [c]

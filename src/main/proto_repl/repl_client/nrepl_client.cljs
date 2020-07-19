@@ -87,8 +87,8 @@
   [rf]
   (let [buffer (volatile! (js/Buffer.from ""))
         rf1 (preserving-reduced rf)]
-    (fn ([] (rf))
-        ([result] (rf result))
+    (fn ([] (rf1))
+        ([result] (rf1 result))
         ([result input]
          (vswap! buffer #(js/Buffer.concat #js [% input]))
          (reduce rf1 result

@@ -147,3 +147,7 @@
 
 (defn global-regex "Return a new regex pattern with the 'g' flat set." [pattern]
   (js/RegExp. (.-source pattern) (str (.-flags pattern) "g")))
+
+
+(defn comp+ "Compose functions, removing nil values" [& funcs]
+  (apply comp (remove nil? funcs)))

@@ -215,5 +215,5 @@
     (close! (request client {:op "interrupt" :interrupt-id id}))))
 
 
-(defn get-value "Get the value from a channel of nREPL messages." [c]
-  (safe-async-reduce (fn [result {:keys [value]}] (if (nil? value) result value)) nil c))
+(defn get-value "Get the value from a channel of nREPL messages." [ch]
+  (safe-async-reduce #(or %1 (:value %2)) nil ch))

@@ -14,6 +14,7 @@
                                              get-cursor-in-block-range]]
             [proto-repl.utils :refer [get-config
                                       safe-async-transduce
+                                      swap-config!
                                       wrap-reducer-try-log]]
             [proto-repl.repl-client.nrepl-client :as nrepl]))
 
@@ -168,11 +169,10 @@
 
 (defn- prepare-repl [r]
   (let [pane (.getActivePane js/atom.workspace)]
-    (r/on-did-start r
-      (fn [] (.emit emitter "proto-repl:connected")
-             (when (.get js/atom.config "proto-repl.refreshOnReplStart")
-               (refresh-namespaces))
-             (.activate pane)))
+    (r/on-did-start r (fn [] (.emit emitter "proto-repl:connected")
+                             (when (get-config :refresh-on-repl-start)
+                               (refresh-namespaces))
+                             (.activate pane)))
     (r/on-did-close r (fn [] (reset! repl nil)
                              (.emit emitter "proto-repl:closed")))
     (r/on-did-stop r #(.emit emitter "proto-repl:stopped"))))
@@ -198,11 +198,10 @@
 (defn remote-nrepl-focus-next []
   (some-> @connection-view cv/toggle-focus))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn toggle-auto-scroll []
-  (let [key "proto-repl.autoScroll"]
-    (.set js/atom.config key (not (.get js/atom.config key)))))
+(defn toggle-auto-scroll [] (swap-config! :auto-scroll not))
 
 
 (defn load-current-file []
@@ -239,7 +238,7 @@
 
 
 ; (defn- show-doc-result-inline [result var-name editor]
-;   (when (js/atom.config.get "proto-repl.showInlineResults"))
+;   (when (get-config :show-inline-results)))
 ;   (when true
 ;     (let [range (doto (.getSelectedBufferRange editor)
 ;                   (lodash.set "end.column" ##Inf))

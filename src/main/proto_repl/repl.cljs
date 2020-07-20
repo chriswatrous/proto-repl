@@ -218,17 +218,18 @@ You can disable this help text in the settings.")
         new-connection (atom nil)
         view (make-ink-repl-view)
         emitter (Emitter.)
-        repl (map->ReplImpl {:current-ns (atom "user")
+        this (map->ReplImpl {:current-ns (atom "user")
                              :emitter emitter
                              :spinner (Spinner.)
                              :connection connection
                              :new-connection new-connection
                              :view view})]
     (when (get-config :display-help-text)
-      (info repl repl-help-text))
+      (info this repl-help-text))
     (rv/on-did-close view
       ; FIXME exception in close handler causes REPL to not be able to start again.
       (fn [] (try (some-> @new-connection nrepl/close)
                   (.emit emitter "proto-repl-repl:close")
                   (catch :default e (js/console.error "Error while closing repl:" e)))))
-    repl))
+    (rv/on-eval view #(execute-entered-text this))
+    this))

@@ -85,8 +85,18 @@
   (if (empty? o) nil o))
 
 
+(defn- config-key [key]
+  (str (or (namespace key) "proto-repl") "." (lodash.camelCase (name key))))
+
+
 (defn get-config "Get a value from the package config." [key]
-  (js/atom.config.get (str "proto-repl." (lodash.camelCase (name key)))))
+  (js/atom.config.get (config-key key)))
+
+
+(defn swap-config! [key f & args]
+  (let [key (config-key key)]
+    (->> (apply f (.get js/atom.config key) args)
+         (.set js/atom.config key))))
 
 
 (defn get-keybindings [command]
@@ -113,6 +123,8 @@
   This is to prevent the editor from crashing with
   \"DevTools was disconnected from the page.\""
   [xform f init ch]
+  (when (nil? ch)
+    (throw (js/Error. "got nil instead of channel")))
   (async/transduce (comp wrap-reducer-try-log xform) f init ch))
 
 
@@ -121,6 +133,8 @@
   This is to prevent the editor from crashing with
   \"DevTools was disconnected from the page.\""
   [f init ch]
+  (when (nil? ch)
+    (throw (js/Error. "got nil instead of channel")))
   (async/transduce wrap-reducer-try-log f init ch))
 
 

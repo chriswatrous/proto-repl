@@ -12,8 +12,8 @@
 
 (defn- run-completion-request [code]
   (go-try-log
-    (-> (nrepl-request {:op "eval" :code code})
-        nrepl/get-value <! edn/read-string)))
+    (some-> (nrepl-request {:op "eval" :code code})
+            nrepl/get-value <! edn/read-string)))
 
 
 (defn- completion->suggestion

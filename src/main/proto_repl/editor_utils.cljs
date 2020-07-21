@@ -1,9 +1,9 @@
 (ns proto-repl.editor-utils
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
-            ["atom" :refer [Range]]
+            ["atom" :refer [Range Point]]
             [proto-repl.utils :refer [comp+ global-regex obj->map regex-or]]
-            [proto-repl.macros :refer-macros [reducing-fn]]))
+            [proto-repl.macros :refer-macros [reducing-fn when-let+]]))
 
 
 (def ^:private eu (js/require "../lib/editor-utils"))
@@ -78,7 +78,7 @@
            xform)))
 
 
-(defn first-top-level-range
+(defn top-level-ranges-first-result
   "Get the first result from passing the top level ranges through xform."
   [{:keys [editor look-in-comments xform]}]
   (first
@@ -98,7 +98,7 @@
   the given editor."
   ([] (some-> (get-active-text-editor) get-ns-from-declaration))
   ([editor]
-   (some-> (first-top-level-range
+   (some-> (top-level-ranges-first-result
              {:editor editor
               :xform (comp (map #(try-edn-read-string (.getTextInBufferRange editor %)))
                            (filter #(and (list? %) (= (first %) 'ns))))})
@@ -110,10 +110,56 @@
   current cursor position. Doesn't work in Markdown blocks of code."
   [{:keys [editor look-in-comments]}]
   (let [pos (.getCursorBufferPosition editor)]
-    (first-top-level-range
+    (top-level-ranges-first-result
       {:editor editor
        :look-in-comments look-in-comments
        :xform (filter #(.containsPoint % pos))})))
+
+
+(defn directly-after-block-range
+  "Determines if the cursor is directly after a closed block. If it is returns
+  the text of that block"
+  [editor]
+  (when-let+ [pos (.getCursorBufferPosition editor)
+              _ (pos? pos.column)
+              previous-pos (Point. pos.row (dec pos.column))
+              previous-char (#{")" "}" "]"}
+                              (.getTextInBufferRange editor (Range. previous-pos pos)))
+              start-pos (.findBlockStartPosition eu editor previous-pos)]
+    (Range. start-pos pos)))
+
+
+(defn directly-before-block-range
+  "Determines if the cursor is directly before a block opening. If it is returns
+  the text of that block"
+  [editor]
+  (when-let+ [pos (.getCursorBufferPosition editor)
+              subsequent-pos (.translate pos (Point. 0 1))
+              after-char (.getTextInBufferRange editor (Range. pos subsequent-pos))
+              _ (#{"(" "{" "["} after-char)
+              end-pos (.findBlockEndPosition eu editor subsequent-pos)
+              closing-pos (.translate end-pos (Point. 0 1))]
+    (Range. pos closing-pos)))
+
+
+(defn get-cursor-in-clojure-block-range [editor]
+  (or (directly-after-block-range editor)
+      (directly-before-block-range editor)
+      (let [pos (.getCursorBufferPosition editor)
+            start-pos (.findBlockStartPosition eu editor pos)
+            end-pos (.findBlockEndPosition eu editor pos)]
+        (when (and start-pos end-pos)
+          (Range. start-pos (.translate end-pos (Point. 0 1)))))))
+
+
+; (defn get-cursor-in-markdown-block-range [editor]
+;   (when-let+ [pos (.getCursorBufferPosition editor)
+;               _ (.isPosInClojureMarkdown eu editor pos)
+;               start-pos (.findMarkdownCodeBlockStartPosition eu editor pos)
+;               ; It's safer to search from the start of the startPos instead of
+;               ; searching from the end position
+;               end-pos (.findMarkdownCodeBlockEndPosition eu editor start-pos)]
+;     (Range. start-pos end-pos)))
 
 
 (defn get-cursor-in-block-range
@@ -123,5 +169,5 @@
   [{:keys [editor top-level]}]
   (or (when top-level
         (get-cursor-in-top-block-range {:editor editor :look-in-comments true}))
-      (.getCursorInClojureBlockRange eu editor)
-      (.getCursorInMarkdownBlockRange eu editor)))
+      (get-cursor-in-clojure-block-range editor)))
+      ; (get-cursor-in-markdown-block-range editor)))

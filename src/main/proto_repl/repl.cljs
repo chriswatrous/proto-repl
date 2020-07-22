@@ -1,17 +1,20 @@
 (ns proto-repl.repl
   (:require [clojure.string :as str]
             [clojure.core.async :as async]
+            [clojure.edn :as edn]
             ["atom" :refer [Emitter]]
             [proto-repl.utils :refer [edn->display-tree
                                       get-config
                                       get-keybindings
                                       obj->map
-                                      pretty-edn]]
+                                      pretty-edn
+                                      safe-async-reduce]]
             [proto-repl.ink :as ink]
             [proto-repl.views.repl-view :as rv]
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
             [proto-repl.repl-client.nrepl-client :as nrepl]
             [proto-repl.macros :refer-macros [go-try-log dochan!]]))
+
 
 (def ^:private TreeView (js/require "../lib/tree-view"))
 (def ^:private Spinner (js/require "../lib/load-widget"))
@@ -31,12 +34,14 @@
   (on-did-start [this callback])
   (on-did-stop [this callback])
   (running? [this])
+  (show-connection-info [this])
   (start-remote-repl-connection [this {:keys [host port]}])
 
   (doc [this text])
   (info [this text])
   (stderr [this text])
   (stdout [this text]))
+
 
 (defn execute-code
   ([this code] (execute-code* this code {}))
@@ -63,11 +68,14 @@ You can disable this help text in the settings.")
 
 ;; ReplImpl "private" methods
 
+
 (defn- handle-repl-started [this]
   (-> this :emitter (.emit "proto-repl-repl:start")))
 
+
 (defn- handle-repl-stopped [this]
   (-> this :emitter (.emit "proto-repl-repl:stop")))
+
 
 (defn- build-tree-view [[head button-options & children]]
   (let [button-options (or button-options {})
@@ -76,6 +84,7 @@ You can disable this help text in the settings.")
     (if (seq child-views)
       (.treeView TreeView head (apply array child-views) button-options)
       (.leafView TreeView head button-options))))
+
 
 (defn- display-inline [this editor range tree error?]
   (let [end (-> range .-end .-row)
@@ -86,24 +95,42 @@ You can disable this help text in the settings.")
                                             :type (if error? "block" "inline")
                                             :scope "proto-repl"})))
 
+
 (defn- maybe-wrap-do-block [code]
   (if (or (re-matches #"\s*[A-Za-z0-9\-!?.<>:\/*=+_]+\s*" code)
           (re-matches #"\s*\([^\(\)]+\)\s*" code))
     code
     (str "(do " code ")")))
 
+
 (defn- when-not-running [this func]
   (if (running? this)
     (stderr this "REPL alrady running")
     (func)))
 
+
 (defn- display-current-ns [{:keys [view current-ns]}]
   (rv/info view (str @current-ns "=>")))
 
+
 (defn- get-connected-pid [{:keys [new-connection]}]
   (go-try-log
-    (-> (nrepl/eval @new-connection {:code '(.pid (java.lang.ProcessHandle/current))})
-        <! :value (or "unknown"))))
+    (or (some-> (nrepl/eval @new-connection {:code '(if-let [pid (some-> (resolve 'js/process)
+                                                                         deref .-pid)]
+                                                      (str pid " (JavaScript)")
+                                                      (str (.pid (java.lang.ProcessHandle/current))
+                                                           " (Java)"))})
+          <! :value edn/read-string)
+        "unknown")))
+
+
+(defn- nrepl-describe [{:keys [new-connection]}]
+  (safe-async-reduce
+    (fn [result m] (do (println m)
+                       (if (:versions m) m result)))
+    nil
+    (nrepl/request @new-connection {:op "describe"})))
+
 
 (defn- display-ns-message [{:keys [view current-ns] :as this} ns status]
     (if (:namespace-not-found status)
@@ -115,6 +142,20 @@ You can disable this help text in the settings.")
       (reset! current-ns ns))
     (display-current-ns this))
 
+
+(defn- show-connection-info* [{:keys [new-connection view] :as this}]
+  (go-try-log
+    (let [{:keys [host port]} @new-connection
+          {:keys [clojure java nrepl]} (:versions (<! (nrepl-describe this)))
+          pid (<! (get-connected-pid this))]
+      (rv/info view (str "Connected to " host ":" port "\n"
+                         "• Clojure " (:version-string clojure) "\n"
+                         "• Java " (:version-string java) "\n"
+                         "• nREPL " (:version-string nrepl) "\n"
+                         "• pid " pid "\n\n"))
+      (display-current-ns this))))
+
+
 (defn- display-nrepl-message [{:keys [view current-ns] :as this}
                               {:keys [out err ns value status ex]}]
   (cond
@@ -123,6 +164,7 @@ You can disable this help text in the settings.")
     value (rv/result view (pretty-edn value))
     ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
   (when ns (display-ns-message this ns status)))
+
 
 (defn- eval-and-display* [{:keys [new-connection view current-ns spinner] :as this}
                           {:keys [code ns editor range]}]
@@ -137,6 +179,7 @@ You can disable this help text in the settings.")
                                                      :column (-> range .-start .-column inc)})))]
         (display-nrepl-message this m))
       (when spinid (.stop spinner editor spinid)))))
+
 
 (defrecord ^:private ReplImpl [emitter current-ns spinner connection
                                new-connection view]
@@ -185,23 +228,19 @@ You can disable this help text in the settings.")
 
   (running? [_] (boolean @new-connection))
 
+  (show-connection-info [this] (show-connection-info* this))
+
   (start-remote-repl-connection [this {:keys [host port]}]
     (if (running? this)
       (rv/stderr view "already connected")
       (go-try-log
+        (reset! current-ns "user")
         (let [c (<! (nrepl/create-client {:host host :port port}))]
           (if-let [err (ex-message c)]
             (rv/stderr view err)
             (do
               (reset! new-connection c)
-              (rv/info view (str "Connected to " host ":" port "\n"))
-              (dochan! [m (nrepl/request c {:op "describe"})]
-                (when-let [{:keys [clojure java nrepl]} (:versions m)]
-                  (rv/info view (str "• Clojure " (:version-string clojure) "\n"
-                                     "• Java " (:version-string java) "\n"
-                                     "• nREPL " (:version-string nrepl) "\n"
-                                     "• pid " (<! (get-connected-pid this)) "\n"))))
-              (display-current-ns this)
+              (show-connection-info this)
               (if-let [err (<! (:error-chan c))]
                 (rv/stderr view (str err))
                 (rv/stderr view "nREPL connection was closed"))))
@@ -211,6 +250,7 @@ You can disable this help text in the settings.")
   (info [_ text] (rv/info view text))
   (stderr [_ text] (rv/stderr view text))
   (stdout [_ text] (rv/stdout view text)))
+
 
 (defn make-repl []
   (when (not ink/ink) (throw (js/Error. "The package 'ink' is required.")))

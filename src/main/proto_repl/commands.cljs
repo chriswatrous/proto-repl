@@ -198,7 +198,8 @@
 
 (defn remote-nrepl-connection "Open the nRepl connection dialog." []
   (if (running?)
-    (r/stderr @repl "Already connected.")
+    (do (r/stderr @repl "Already connected.")
+        (r/show-connection-info @repl))
     (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection))))
 
 

@@ -66,8 +66,10 @@
     (.decorateMarker editor marker #js {:type "highlight" :class "block-execution"})
     (js/setTimeout #(.destroy marker) 350)))
 
+
 (defn external-eval [code]
   (r/eval-and-display @repl {:code code}))
+
 
 (defn execute-block
   ([{:keys [top-level]}]
@@ -167,6 +169,7 @@
 
 ;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
 (defn- prepare-repl [r]
   (let [pane (.getActivePane js/atom.workspace)]
     (r/on-did-start r (fn [] (.emit emitter "proto-repl:connected")
@@ -177,7 +180,9 @@
                              (.emit emitter "proto-repl:closed")))
     (r/on-did-stop r #(.emit emitter "proto-repl:stopped"))))
 
+
 ;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (defonce ^:private connection-view (atom nil))
 
@@ -186,13 +191,15 @@
   (when-not @repl
     (let [r (r/make-repl)]
       (prepare-repl r)
-      (r/start-remote-repl-connection r params)
       (reset! connection-view nil)
-      (reset! repl r))))
+      (reset! repl r)))
+  (r/start-remote-repl-connection @repl params))
 
 
 (defn remote-nrepl-connection "Open the nRepl connection dialog." []
-  (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection)))
+  (if (running?)
+    (r/stderr @repl "Already connected.")
+    (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection))))
 
 
 (defn remote-nrepl-focus-next []
@@ -200,6 +207,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (defn toggle-auto-scroll [] (swap-config! :auto-scroll not))
 

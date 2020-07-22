@@ -32,13 +32,12 @@
 ; run command on each character of expression
 (+ 1 1)
 
-
-
 ; FIXME handle char literals
-(println \()
-(do (+ 1 1))
-(println \))
-(do (+ 1 1))
+(comment
+  (println \()
+  (do (+ 1 1))
+  (println \))
+  (do (+ 1 1)))
 
 ; Make sure *e shows last exception.
 (comment

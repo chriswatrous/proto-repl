@@ -280,4 +280,9 @@ map
 (comment
   ; retype these
   clojure.string/join
-  map)
+  map
+
+  (do nrepl.core/version-string)
+  {:clojure (clojure-version)
+   :java (System/getProperty "java.version")
+   :nrepl nrepl.core/version-string})

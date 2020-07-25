@@ -101,8 +101,8 @@ You can disable this help text in the settings.")
 
 
 (def ^:private get-pid-code
-  (str "#?" '(:clj (str (.pid (java.lang.ProcessHandle/current)) " (Java)")
-              :cljs (str js/process.pid " (JavaScript)"))))
+  (str "#?" '(:clj (.pid (java.lang.ProcessHandle/current))
+              :cljs js/process.pid)))
 
 
 (defn- get-connected-pid [{:keys [new-connection]}]
@@ -111,16 +111,25 @@ You can disable this help text in the settings.")
                 <! :value edn/read-string)
         "unknown")))
 
+(def ^:private get-versions-code
+  (str "#?" '(:clj {:clojure (clojure-version)
+                    :java (System/getProperty "java.version")
+                    :nrepl nrepl.core/version-string}
+              :cljs {:cljs *clojurescript-version*
+                     :node (try js/process.versions.node (catch :default _))
+                     :chrome (try js/process.versions.chrome (catch :default _))
+                     :electron (try js/process.versions.electron (catch :default _))
+                     :v8 (try js/process.versions.v8 (catch :default _))
+                     :user-agent (try js/navigator.userAgent (catch :default _))})))
 
-(defn- nrepl-describe [{:keys [new-connection]}]
-  (safe-async-reduce
-    (fn [result m] (do (println m)
-                       (if (:versions m) m result)))
-    nil
-    (nrepl/request @new-connection {:op "describe"})))
+
+(defn- get-versions [{:keys [new-connection]}]
+  (go-try-log
+    (-> (nrepl/eval @new-connection {:code get-versions-code})
+        <! :value edn/read-string)))
 
 
-(defn- display-ns-message [{:keys [view current-ns] :as this} ns status]
+(defn- display-missing-ns-message [{:keys [view current-ns] :as this} ns status]
     (if (:namespace-not-found status)
       (rv/stderr view (str "Namespace not found: " ns "\n\n"
                            "Try loading the current file.  "
@@ -134,13 +143,21 @@ You can disable this help text in the settings.")
 (defn- show-connection-info* [{:keys [new-connection view] :as this}]
   (go-try-log
     (let [{:keys [host port]} @new-connection
-          {:keys [clojure java nrepl]} (:versions (<! (nrepl-describe this)))
+          {:keys [clojure java nrepl cljs node chrome electron v8 user-agent]}
+          (<! (get-versions this))
           pid (<! (get-connected-pid this))]
-      (rv/info view (str "Connected to " host ":" port "\n"
-                         "• Clojure " (:version-string clojure) "\n"
-                         "• Java " (:version-string java) "\n"
-                         "• nREPL " (:version-string nrepl) "\n"
-                         "• pid " pid "\n\n"))
+      (rv/info view
+               (str "Connected to " host ":" port "\n"
+                    (when clojure (str "• Clojure " clojure "\n"))
+                    (when java (str "• Java " java "\n"))
+                    (when nrepl (str "• nREPL " nrepl "\n"))
+                    (when cljs (str "• ClojureScript " cljs "\n"))
+                    (when node (str "• Node " node "\n"))
+                    (when chrome (str "• Chrome " chrome "\n"))
+                    (when electron (str "• Electron " electron "\n"))
+                    (when v8 (str "• V8 " v8 "\n"))
+                    (when user-agent (str "• User Agent " (pr-str user-agent) "\n"))
+                    "• pid " pid "\n\n"))
       (display-current-ns this))))
 
 
@@ -151,7 +168,7 @@ You can disable this help text in the settings.")
     err (rv/stderr view err)
     value (rv/result view (pretty-edn value))
     ex (rv/stderr view "\nEvaluate *e to see the full stack trace."))
-  (when ns (display-ns-message this ns status)))
+  (when ns (display-missing-ns-message this ns status)))
 
 
 (defn- eval-and-display* [{:keys [new-connection view current-ns spinner] :as this}

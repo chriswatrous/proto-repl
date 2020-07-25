@@ -8,7 +8,8 @@
                                       get-keybindings
                                       obj->map
                                       pretty-edn
-                                      safe-async-reduce]]
+                                      safe-async-reduce
+                                      try-edn-read-string]]
             [proto-repl.ink :as ink]
             [proto-repl.views.repl-view :as rv]
             [proto-repl.views.ink-repl-view :refer [make-ink-repl-view]]
@@ -100,33 +101,39 @@ You can disable this help text in the settings.")
   (rv/info view (str @current-ns "=>")))
 
 
+(defn- eval-and-parse [{:keys [new-connection]} code]
+  (go-try-log
+    (-> (nrepl/eval @new-connection {:code code})
+        <! :value try-edn-read-string)))
+
+
 (def ^:private get-pid-code
   (str "#?" '(:clj (.pid (java.lang.ProcessHandle/current))
               :cljs js/process.pid)))
 
 
-(defn- get-connected-pid [{:keys [new-connection]}]
+(defn- get-connected-pid [this]
   (go-try-log
-    (or (some-> (nrepl/eval @new-connection {:code get-pid-code})
-                <! :value edn/read-string)
+    (or (<! (eval-and-parse this get-pid-code))
         "unknown")))
+
 
 (def ^:private get-versions-code
   (str "#?" '(:clj {:clojure (clojure-version)
                     :java (System/getProperty "java.version")
                     :nrepl nrepl.core/version-string}
-              :cljs {:cljs *clojurescript-version*
-                     :node (try js/process.versions.node (catch :default _))
-                     :chrome (try js/process.versions.chrome (catch :default _))
-                     :electron (try js/process.versions.electron (catch :default _))
-                     :v8 (try js/process.versions.v8 (catch :default _))
-                     :user-agent (try js/navigator.userAgent (catch :default _))})))
+              :cljs (merge
+                      {:cljs *clojurescript-version*
+                       :user-agent (try js/navigator.userAgent (catch :default _))}
+                      (when-let [versions (try js/process.versions (catch :default _))]
+                        {:node (.-node versions)
+                         :chrome (.-chrome versions)
+                         :electron (.-electron versions)
+                         :v8 (.-v8 versions)})))))
 
 
-(defn- get-versions [{:keys [new-connection]}]
-  (go-try-log
-    (-> (nrepl/eval @new-connection {:code get-versions-code})
-        <! :value edn/read-string)))
+(defn- get-versions [this]
+  (eval-and-parse this get-versions-code))
 
 
 (defn- display-missing-ns-message [{:keys [view current-ns] :as this} ns status]
@@ -140,6 +147,15 @@ You can disable this help text in the settings.")
     (display-current-ns this))
 
 
+(defn- version-line [display-name version]
+  (when version
+    (str "• " display-name " " version "\n")))
+
+
+(defn- version-lines [& args]
+  (str/join (map #(apply version-line %) args)))
+
+
 (defn- show-connection-info* [{:keys [new-connection view] :as this}]
   (go-try-log
     (let [{:keys [host port]} @new-connection
@@ -148,15 +164,16 @@ You can disable this help text in the settings.")
           pid (<! (get-connected-pid this))]
       (rv/info view
                (str "Connected to " host ":" port "\n"
-                    (when clojure (str "• Clojure " clojure "\n"))
-                    (when java (str "• Java " java "\n"))
-                    (when nrepl (str "• nREPL " nrepl "\n"))
-                    (when cljs (str "• ClojureScript " cljs "\n"))
-                    (when node (str "• Node " node "\n"))
-                    (when chrome (str "• Chrome " chrome "\n"))
-                    (when electron (str "• Electron " electron "\n"))
-                    (when v8 (str "• V8 " v8 "\n"))
-                    (when user-agent (str "• User Agent " (pr-str user-agent) "\n"))
+                    (version-lines
+                      ["Clojure" clojure]
+                      ["Java" java]
+                      ["nREPL" nrepl]
+                      ["ClojureScript" cljs]
+                      ["Node" node]
+                      ["Chrome" chrome]
+                      ["Electron" electron]
+                      ["V8" v8]
+                      ["User Agent" (when user-agent (pr-str user-agent))])
                     "• pid " pid "\n\n"))
       (display-current-ns this))))
 

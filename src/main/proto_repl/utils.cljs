@@ -171,3 +171,8 @@
   (if (contains? m k)
    (apply update m k f args)
    m))
+
+
+(defn try-edn-read-string [s]
+  (try (edn/read-string s)
+       (catch :default _)))

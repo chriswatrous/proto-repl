@@ -2,7 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             ["atom" :refer [Range Point]]
-            [proto-repl.utils :refer [comp+ global-regex obj->map regex-or]]
+            [proto-repl.utils :refer [comp+ global-regex obj->map regex-or try-edn-read-string]]
             [proto-repl.macros :refer-macros [reducing-fn when-let+]]))
 
 
@@ -86,11 +86,6 @@
       {:editor editor
        :look-in-comments look-in-comments
        :xform (comp+ xform (take 1))})))
-
-
-(defn- try-edn-read-string [s]
-  (try (edn/read-string s)
-       (catch :default _)))
 
 
 (defn get-ns-from-declaration

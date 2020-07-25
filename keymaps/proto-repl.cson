@@ -66,9 +66,6 @@
   'ctrl-, n': 'proto-repl:list-ns-vars'
   'ctrl-< n': 'proto-repl:list-ns-vars-with-docs'
   'ctrl-, o': 'proto-repl:open-file-containing-var'
-  'ctrl-< i': 'proto-repl:insert-save-value-call'
-  'ctrl-< d': 'proto-repl:display-saved-values'
-  'ctrl-< c': 'proto-repl:clear-saved-values'
 
 ## Mac Specific Keybindings
 '.platform-darwin atom-workspace atom-text-editor:not([mini])':
@@ -92,11 +89,9 @@
   'cmd-alt-n': 'proto-repl:list-ns-vars'
   'cmd-alt-shift-n': 'proto-repl:list-ns-vars-with-docs'
   'cmd-alt-o': 'proto-repl:open-file-containing-var'
-
-  # Save and recall beta keybindings
-  'alt-shift-i': 'proto-repl:insert-save-value-call'
-  'alt-shift-d': 'proto-repl:display-saved-values'
-  'alt-shift-c': 'proto-repl:clear-saved-values'
+  'cmd-shift-m': 'proto-repl:macroexpand-1-block'
+  'alt-shift-m': 'proto-repl:macroexpand-block'
+  'cmd-alt-shift-m': 'proto-repl:macroexpand-all-block'
 
 # Fixes enter in the atom ink console. Lisp Paredit can cause problems
 '.platform-win32 ink-console atom-text-editor[data-grammar~="clojure"],

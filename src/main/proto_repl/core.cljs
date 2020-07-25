@@ -177,7 +177,10 @@
              "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
              "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
              "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
-             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)}))))
+             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
+             "proto-repl:macroexpand-1-block" #(c/macroexpand-1-block)
+             "proto-repl:macroexpand-block" #(c/macroexpand-block)
+             "proto-repl:macroexpand-all-block" #(c/macroexpand-all-block)}))))
 
 
 (defn- deactivate []

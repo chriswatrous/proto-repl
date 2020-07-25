@@ -8,6 +8,7 @@
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
             [proto-repl.views.nrepl-connection-view :as cv]
+            [proto-repl.views.connection-view-2]
             [proto-repl.macros :refer-macros [go-try-log dochan! when-let+ template-fill]]
             [proto-repl.editor-utils :refer [get-active-text-editor
                                              get-ns-from-declaration
@@ -71,31 +72,41 @@
   (r/eval-and-display @repl {:code code}))
 
 
-(defn execute-block
-  ([{:keys [top-level]}]
+(defn execute-block [{:keys [top-level wrap]}]
    (when-let+ [editor (get-active-text-editor)
-               range (get-cursor-in-block-range {:editor editor :top-level top-level})]
+               range (get-cursor-in-block-range {:editor editor :top-level top-level})
+               code (-> editor (.getTextInBufferRange range) str/trim)]
      (flash-highlight-range editor range)
      (r/eval-and-display @repl
-                         {:code (-> editor (.getTextInBufferRange range) str/trim)
+                         {:code (if wrap (wrap code) code)
                           :ns (get-ns-from-declaration editor)
                           :editor editor
-                          :range range}))))
+                          :range range})))
 
 
-(defn execute-selected-text "Executes the selected code."
-  ([] (execute-selected-text {}))
-  ([options]
-   (when-let+ [editor (get-active-text-editor)
-               range (.getSelectedBufferRange editor)]
-     (when (lodash.isEqual range.start range.end)
-       (set! range.end.column ##Inf))
-     (r/eval-and-display @repl
-                         {:code (or (not-empty (.getSelectedText editor))
-                                    (get-var-under-cursor editor))
-                          :ns (get-ns-from-declaration editor)
-                          :editor editor
-                          :range range}))))
+(defn macroexpand-1-block []
+  (execute-block {:wrap #(str "(macroexpand-1 '\n" % ")")}))
+
+
+(defn macroexpand-block []
+  (execute-block {:wrap #(str "(macroexpand '\n" % ")")}))
+
+
+(defn macroexpand-all-block []
+  (execute-block {:wrap #(str "(clojure.walk/macroexpand-all '\n" % ")")}))
+
+
+(defn execute-selected-text "Executes the selected code." []
+  (when-let+ [editor (get-active-text-editor)
+              range (.getSelectedBufferRange editor)]
+    (when (lodash.isEqual range.start range.end)
+      (set! range.end.column ##Inf))
+    (r/eval-and-display @repl
+                        {:code (or (not-empty (.getSelectedText editor))
+                                   (get-var-under-cursor editor))
+                         :ns (get-ns-from-declaration editor)
+                         :editor editor
+                         :range range})))
 
 
 (defn clear-repl []

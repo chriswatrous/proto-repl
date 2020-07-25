@@ -96,31 +96,19 @@ You can disable this help text in the settings.")
                                             :scope "proto-repl"})))
 
 
-(defn- maybe-wrap-do-block [code]
-  (if (or (re-matches #"\s*[A-Za-z0-9\-!?.<>:\/*=+_]+\s*" code)
-          (re-matches #"\s*\([^\(\)]+\)\s*" code))
-    code
-    (str "(do " code ")")))
-
-
-(defn- when-not-running [this func]
-  (if (running? this)
-    (stderr this "REPL alrady running")
-    (func)))
-
-
 (defn- display-current-ns [{:keys [view current-ns]}]
   (rv/info view (str @current-ns "=>")))
 
 
+(def ^:private get-pid-code
+  (str "#?" '(:clj (str (.pid (java.lang.ProcessHandle/current)) " (Java)")
+              :cljs (str js/process.pid " (JavaScript)"))))
+
+
 (defn- get-connected-pid [{:keys [new-connection]}]
   (go-try-log
-    (or (some-> (nrepl/eval @new-connection {:code '(if-let [pid (some-> (resolve 'js/process)
-                                                                         deref .-pid)]
-                                                      (str pid " (JavaScript)")
-                                                      (str (.pid (java.lang.ProcessHandle/current))
-                                                           " (Java)"))})
-          <! :value edn/read-string)
+    (or (some-> (nrepl/eval @new-connection {:code get-pid-code})
+                <! :value edn/read-string)
         "unknown")))
 
 

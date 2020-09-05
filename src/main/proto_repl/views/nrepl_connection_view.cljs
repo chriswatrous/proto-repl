@@ -104,3 +104,7 @@
 
 (defn toggle-focus [connection-view]
   (.toggleFocus connection-view))
+
+
+(comment
+  (show-connection-view))

@@ -5,7 +5,8 @@
             [proto-repl.repl :as r]
             [proto-repl.integration.core]
             [proto-repl.ink :as ink]
-            [proto-repl.autocomplete :refer [provide-autocomplete]]))
+            [proto-repl.autocomplete :refer [provide-autocomplete]]
+            [proto-repl.views.connection-view-2 :refer [show-connection-view]]))
 
 (def ^:private edn-reader (js/require "../lib/proto_repl/edn_reader"))
 
@@ -180,7 +181,8 @@
              "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
              "proto-repl:macroexpand-1-block" #(c/macroexpand-1-block)
              "proto-repl:macroexpand-block" #(c/macroexpand-block)
-             "proto-repl:macroexpand-all-block" #(c/macroexpand-all-block)}))))
+             "proto-repl:macroexpand-all-block" #(c/macroexpand-all-block)
+             "proto-repl:experimental-command" #(show-connection-view)}))))
 
 
 (defn- deactivate []

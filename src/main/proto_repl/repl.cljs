@@ -80,7 +80,7 @@ You can disable this help text in the settings.")
 
 (defn- build-tree-view [[head button-options & children]]
   (let [button-options (or button-options {})
-        child-views (map #(if (vector? %) (build-tree-view %) (.leafView TreeView % #js {}))
+        child-views (map #(if (vector? %) (build-tree-view %) (.leafView TreeView % #js{}))
                          children)]
     (if (seq child-views)
       (.treeView TreeView head (apply array child-views) button-options)

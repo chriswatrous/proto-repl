@@ -57,14 +57,14 @@
 (defn get-var-under-cursor
   ([] (some-> (get-active-text-editor) get-var-under-cursor))
   ([editor]
-   (or (not-empty (.getWordUnderCursor editor #js {:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"}))
+   (or (not-empty (.getWordUnderCursor editor #js{:wordRegex #"[a-zA-Z0-9\-.$!?\/><*=_:]+"}))
        (do (stderr "This command requires you to position the cursor on a Clojure var.")
            nil))))
 
 
 (defn- flash-highlight-range [editor range]
   (let [marker (.markBufferRange editor range)]
-    (.decorateMarker editor marker #js {:type "highlight" :class "block-execution"})
+    (.decorateMarker editor marker #js{:type "highlight" :class "block-execution"})
     (js/setTimeout #(.destroy marker) 350)))
 
 

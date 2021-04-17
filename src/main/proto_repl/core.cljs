@@ -123,32 +123,32 @@
 (defn- consume-toolbar [make-toolbar]
   (let [tb (make-toolbar "proto-repl")]
     (doto tb
-      (.addButton #js {:icon "android-refresh"
-                       :iconset "ion"
-                       :callback "proto-repl:refresh-namespaces"
-                       :tooltip "Refresh Namespaces"})
-      (.addButton #js {:icon "android-sync"
-                       :iconset "ion"
-                       :callback "proto-repl:super-refresh-namespaces"
-                       :tooltip "Clear and Refresh Namespaces"})
-      (.addButton #js {:icon "speedometer"
-                       :iconset "ion"
-                       :callback "proto-repl:run-all-tests"
-                       :tooltip "Run All Tests"})
+      (.addButton #js{:icon "android-refresh"
+                      :iconset "ion"
+                      :callback "proto-repl:refresh-namespaces"
+                      :tooltip "Refresh Namespaces"})
+      (.addButton #js{:icon "android-sync"
+                      :iconset "ion"
+                      :callback "proto-repl:super-refresh-namespaces"
+                      :tooltip "Clear and Refresh Namespaces"})
+      (.addButton #js{:icon "speedometer"
+                      :iconset "ion"
+                      :callback "proto-repl:run-all-tests"
+                      :tooltip "Run All Tests"})
       (.addSpacer)
-      (.addButton #js {:icon "code-download"
-                       :iconset "ion"
-                       :callback "proto-repl:toggle-auto-scroll"
-                       :tooltip "Toggle Auto Scroll"})
-      (.addButton #js {:icon "trash-a"
-                       :iconset "ion"
-                       :callback "proto-repl:clear-repl"
-                       :tooltip "Clear REPL"})
+      (.addButton #js{:icon "code-download"
+                      :iconset "ion"
+                      :callback "proto-repl:toggle-auto-scroll"
+                      :tooltip "Toggle Auto Scroll"})
+      (.addButton #js{:icon "trash-a"
+                      :iconset "ion"
+                      :callback "proto-repl:clear-repl"
+                      :tooltip "Clear REPL"})
       (.addSpacer)
-      (.addButton #js {:icon "power"
-                       :iconset "ion"
-                       :callback "proto-repl:exit-repl"
-                       :tooltip "Quit REPL"}))
+      (.addButton #js{:icon "power"
+                      :iconset "ion"
+                      :callback "proto-repl:exit-repl"
+                      :tooltip "Quit REPL"}))
     (reset! toolbar tb)))
 
 
@@ -157,32 +157,31 @@
         (.add
           js/atom.commands
           "atom-workspace"
-          (clj->js
-            {"proto-repl:clear-repl" #(c/clear-repl)
-             "proto-repl:execute-block" #(c/execute-block {:top-level false})
-             "proto-repl:execute-selected-text" #(c/execute-selected-text)
-             "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
-             "proto-repl:execute-top-block" #(c/execute-block {:top-level true})
-             "proto-repl:exit-repl" #(c/exit-repl)
-             "proto-repl:interrupt" #(c/interrupt)
-             "proto-repl:list-ns-vars-with-docs" #(c/list-ns-vars-with-docs)
-             "proto-repl:list-ns-vars" #(c/list-ns-vars)
-             "proto-repl:load-current-file" #(c/load-current-file)
-             "proto-repl:open-file-containing-var" #(c/open-file-containing-var)
-             "proto-repl:print-var-code" #(c/print-var-code)
-             "proto-repl:print-var-documentation" #(c/print-var-documentation)
-             "proto-repl:refresh-namespaces" #(c/refresh-namespaces)
-             "proto-repl:remote-nrepl-connection" #(c/remote-nrepl-connection)
-             "proto-repl:remote-nrepl-focus-next" #(c/remote-nrepl-focus-next)
-             "proto-repl:run-all-tests" #(c/run-all-tests)
-             "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
-             "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
-             "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
-             "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
-             "proto-repl:macroexpand-1-block" #(c/macroexpand-1-block)
-             "proto-repl:macroexpand-block" #(c/macroexpand-block)
-             "proto-repl:macroexpand-all-block" #(c/macroexpand-all-block)
-             "proto-repl:experimental-command" #(show-connection-view)}))))
+          #js{"proto-repl:clear-repl" #(c/clear-repl)
+              "proto-repl:execute-block" #(c/execute-block {:top-level false})
+              "proto-repl:execute-selected-text" #(c/execute-selected-text)
+              "proto-repl:execute-text-entered-in-repl" #(c/execute-text-entered-in-repl)
+              "proto-repl:execute-top-block" #(c/execute-block {:top-level true})
+              "proto-repl:exit-repl" #(c/exit-repl)
+              "proto-repl:interrupt" #(c/interrupt)
+              "proto-repl:list-ns-vars-with-docs" #(c/list-ns-vars-with-docs)
+              "proto-repl:list-ns-vars" #(c/list-ns-vars)
+              "proto-repl:load-current-file" #(c/load-current-file)
+              "proto-repl:open-file-containing-var" #(c/open-file-containing-var)
+              "proto-repl:print-var-code" #(c/print-var-code)
+              "proto-repl:print-var-documentation" #(c/print-var-documentation)
+              "proto-repl:refresh-namespaces" #(c/refresh-namespaces)
+              "proto-repl:remote-nrepl-connection" #(c/remote-nrepl-connection)
+              "proto-repl:remote-nrepl-focus-next" #(c/remote-nrepl-focus-next)
+              "proto-repl:run-all-tests" #(c/run-all-tests)
+              "proto-repl:run-test-under-cursor" #(c/run-test-under-cursor)
+              "proto-repl:run-tests-in-namespace" #(c/run-tests-in-namespace)
+              "proto-repl:super-refresh-namespaces" #(c/super-refresh-namespaces)
+              "proto-repl:toggle-auto-scroll" #(c/toggle-auto-scroll)
+              "proto-repl:macroexpand-1-block" #(c/macroexpand-1-block)
+              "proto-repl:macroexpand-block" #(c/macroexpand-block)
+              "proto-repl:macroexpand-all-block" #(c/macroexpand-all-block)
+              "proto-repl:experimental-command" #(show-connection-view)})))
 
 
 (defn- deactivate []
@@ -198,14 +197,14 @@
 
 
 (def exports
-  (clj->js {:activate activate
-            :config config
-            :consumeToolbar consume-toolbar
-            :consumeInk ink/init
-            :deactivate deactivate
-            :provideAutocomplete provide-autocomplete}))
+  #js{:activate activate
+      :config config
+      :consumeToolbar consume-toolbar
+      :consumeInk ink/init
+      :deactivate deactivate
+      :provideAutocomplete provide-autocomplete})
 
 
-(let [notification (js/atom.notifications.addInfo "proto-repl loaded" #js {:dismissable true})]
+(let [notification (js/atom.notifications.addInfo "proto-repl loaded" #js{:dismissable true})]
   (js/console.log "proto-repl loaded")
   (js/setTimeout #(.dismiss notification) 1000))

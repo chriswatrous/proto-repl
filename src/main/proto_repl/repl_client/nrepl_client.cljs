@@ -83,7 +83,7 @@
         client-chan (chan)
         error-chan (chan)
         close-chans #(run! close! [message-chan error-chan client-chan])
-        socket (net.createConnection #js {:host host :port port})]
+        socket (net.createConnection #js{:host host :port port})]
      (doto socket
        (.on "close" close-chans)
        (.on "data" #(put! message-chan %))

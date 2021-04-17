@@ -19,10 +19,10 @@
 (defn- completion->suggestion
   "Converts a completion result into a suggestion for Autocomplete"
   [prefix {:keys [candidate docs type]}]
-  #js {:text candidate
-       :type type
-       :description docs
-       :replacementPrefix prefix})
+  #js{:text candidate
+      :type type
+      :description docs
+      :replacementPrefix prefix})
 
 
 (defn- buffer-position-context
@@ -80,10 +80,10 @@
 
 (defn provide-autocomplete "Called by autocomplete-plus to return our Clojure provider" []
   (when (get-config :enable-completions)
-    #js {:scopeSelector ".source.clojure"
-         :textEditorSelectors "atom-text-editor"
-         :disableForScopeSelector ".source.clojure .comment, .source.clojure .string"
-         :inclusionPriority 100
-         :excludeLowerPriority false
-         :getTextEditorSelector (constantly "atom-text-editor")
-         :getSuggestions #(get-suggestions %)}))
+    #js{:scopeSelector ".source.clojure"
+        :textEditorSelectors "atom-text-editor"
+        :disableForScopeSelector ".source.clojure .comment, .source.clojure .string"
+        :inclusionPriority 100
+        :excludeLowerPriority false
+        :getTextEditorSelector (constantly "atom-text-editor")
+        :getSuggestions #(get-suggestions %)}))

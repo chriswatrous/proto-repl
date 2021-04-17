@@ -46,7 +46,7 @@
 
 ;reader conditional
 (do #?(:clj "clojure"
-       :cljs #js {}))
+       :cljs #js{}))
 
 ; FIXME should work on bare symbols, keywords, numbers, strings
 map

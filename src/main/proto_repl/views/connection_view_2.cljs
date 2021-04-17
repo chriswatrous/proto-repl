@@ -29,7 +29,7 @@
 
 (defn show-connection-view []
   (let [div (js/document.createElement "div")]
-    (reset! panel (.. js/atom.workspace (addModalPanel #js {:item div})))
+    (reset! panel (.. js/atom.workspace (addModalPanel #js{:item div})))
     (rdom/render view div)))
 
 

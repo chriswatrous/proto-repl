@@ -100,7 +100,7 @@
 
 
 (defn get-keybindings [command]
-  (->> (.findKeyBindings js/atom.keymaps #js {:command (str "proto-repl:" (name command))})
+  (->> (.findKeyBindings js/atom.keymaps #js{:command (str "proto-repl:" (name command))})
        (mapv #(.-keystrokes %))))
 
 

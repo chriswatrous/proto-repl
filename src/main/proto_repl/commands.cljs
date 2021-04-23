@@ -7,8 +7,7 @@
             ["path" :refer [dirname]]
             [proto-repl.repl :as r]
             [proto-repl.ink :as ink]
-            [proto-repl.views.nrepl-connection-view :as cv]
-            [proto-repl.views.connection-view-2]
+            [proto-repl.views.connection-view :refer [get-connection-info-from-user]]
             [proto-repl.macros :refer-macros [go-try-log dochan! when-let+ template-fill]]
             [proto-repl.editor-utils :refer [get-active-text-editor
                                              get-ns-from-declaration
@@ -178,7 +177,7 @@
       (stderr "Refresh failed"))))
 
 
-;;;; Repl starting commands ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (defn- prepare-repl [r]
@@ -192,30 +191,21 @@
     (r/on-did-stop r #(.emit emitter "proto-repl:stopped"))))
 
 
-;; Remote NREPL connection ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-(defonce ^:private connection-view (atom nil))
-
-
 (defn- handle-remote-nrepl-connection [params]
   (when-not @repl
     (let [r (r/make-repl)]
       (prepare-repl r)
-      (reset! connection-view nil)
       (reset! repl r)))
   (r/start-remote-repl-connection @repl params))
 
 
-(defn remote-nrepl-connection "Open the nRepl connection dialog." []
+(defn remote-nrepl-connection []
   (if (running?)
-    (do (r/stderr @repl "Already connected.")
+    (do (stderr "Already connected.")
         (r/show-connection-info @repl))
-    (reset! connection-view (cv/show-connection-view handle-remote-nrepl-connection))))
-
-
-(defn remote-nrepl-focus-next []
-  (some-> @connection-view cv/toggle-focus))
+    (go-try-log
+      (when-let [params (<! (get-connection-info-from-user))]
+        (handle-remote-nrepl-connection params)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

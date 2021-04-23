@@ -73,7 +73,6 @@
   'cmd-alt-shift-l': 'proto-repl:toggle-current-project-clj'
   'cmd-alt-j': 'proto-repl:start-self-hosted-repl'
   'cmd-alt-y': 'proto-repl:remote-nrepl-connection'
-  'cmd-alt-shift-y': 'proto-repl:remote-nrepl-connection-2'
   'cmd-alt-shift-s': 'proto-repl:toggle-auto-scroll'
   'cmd-alt-b': 'proto-repl:execute-block'
   'cmd-alt-shift-b': 'proto-repl:execute-top-block'
@@ -93,7 +92,6 @@
   'cmd-shift-m': 'proto-repl:macroexpand-1-block'
   'alt-shift-m': 'proto-repl:macroexpand-block'
   'cmd-alt-shift-m': 'proto-repl:macroexpand-all-block'
-  'alt-shift-e': 'proto-repl:experimental-command'
 
 # Fixes enter in the atom ink console. Lisp Paredit can cause problems
 '.platform-win32 ink-console atom-text-editor[data-grammar~="clojure"],
